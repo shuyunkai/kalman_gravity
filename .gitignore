@@ -1,0 +1,9 @@
+data/
+output_global/
+output_real/
+output_figures/
+__pycache__/
+*.pyc
+font_test.png
+diff_test.png
+output/
