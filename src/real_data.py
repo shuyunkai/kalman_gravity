@@ -102,6 +102,103 @@ def load_gebco(filepath=None, region=None):
     return {"bathymetry": bathymetry, "lon": lon, "lat": lat, "resolution": "15 arc-sec"}
 
 
+def load_gebco_tid(filepath=None, region=None):
+    """加载 GEBCO TID (Type Identifier) 类型标识格网。
+
+    TID 值含义:
+      0 = 陆地
+      1 = 实测多波束/单波束 → 独立测量，可用于约束
+      2 = 卫星重力反演填充 → 循环推导，绝对不能用于约束
+      3+ = 插值/预生成格网 → 循环推导
+
+    Returns dict with tid, lon, lat.
+    """
+    if filepath is None:
+        candidates = list(DATA_DIR.glob("**/GEBCO*TID*.nc")) + \
+                      list(DATA_DIR.glob("**/gebco*/*TID*.nc"))
+        if not candidates:
+            raise FileNotFoundError(
+                "GEBCO TID 文件未找到，请从 https://download.gebco.net 下载")
+        filepath = candidates[0]
+
+    print(f"Loading GEBCO TID from: {filepath}")
+    ds = xr.open_dataset(str(filepath), engine="h5netcdf")
+
+    lon_name = "lon" if "lon" in ds.dims else "longitude"
+    lat_name = "lat" if "lat" in ds.dims else "latitude"
+
+    # GEBCO TID 使用 -180/180 经度，需转换
+    if region is not None:
+        lon_min, lon_max, lat_min, lat_max = region
+        ds_lon = ds[lon_name].values
+        if lon_min < 0 and ds_lon.min() >= 0:
+            lon_min += 360
+            lon_max += 360
+        ds = ds.sel(**{lon_name: slice(lon_min, lon_max),
+                       lat_name: slice(lat_min, lat_max)})
+
+    # TID 变量名可能是 'tid' 或第一个 2D data variable
+    tid_name = "tid" if "tid" in ds else [v for v in ds.data_vars
+                                           if len(ds[v].dims) >= 2][0]
+    tid = ds[tid_name].values.astype(np.int16)
+    lon_t = ds[lon_name].values
+    lat_t = ds[lat_name].values
+    ds.close()
+
+    n_measured = (tid == 1).sum()
+    n_inverted = (tid == 2).sum()
+    print(f"  TID: shape={tid.shape}, measured={n_measured:,}, inverted={n_inverted:,}")
+    return {"tid": tid, "lon": lon_t, "lat": lat_t}
+
+
+def tid_to_multibeam_mask(tid_data):
+    """将 TID 格网转换为布尔掩码: TID==1 (实测多波束) 为 True。"""
+    return tid_data == 1
+
+
+def load_globsed(filepath=None, region=None):
+    """加载 GlobSed v3 全球海洋沉积厚度格网 (Straume et al. 2019).
+
+    分辨率: 5 弧分 (~9 km at equator)
+    值范围: 0-18000 m
+
+    Returns dict with thickness, lon, lat.
+    """
+    if filepath is None:
+        candidates = list(DATA_DIR.glob("**/GlobSed*/*.nc")) + \
+                      list(DATA_DIR.glob("**/GlobSed*.nc"))
+        if not candidates:
+            raise FileNotFoundError(
+                "GlobSed 文件未找到，请从 https://www.ngdc.noaa.gov/mgg/sedthick/ 下载")
+        filepath = candidates[0]
+
+    print(f"Loading GlobSed from: {filepath}")
+    ds = xr.open_dataset(str(filepath), engine="h5netcdf")
+
+    lon_name = "lon" if "lon" in ds.dims else "longitude"
+    lat_name = "lat" if "lat" in ds.dims else "latitude"
+    data_name = [v for v in ds.data_vars if len(ds[v].dims) >= 2][0]
+
+    if region is not None:
+        lon_min, lon_max, lat_min, lat_max = region
+        ds_lon = ds[lon_name].values
+        if lon_min < 0 and ds_lon.min() >= 0:
+            lon_min += 360
+            lon_max += 360
+        ds = ds.sel(**{lon_name: slice(lon_min, lon_max),
+                       lat_name: slice(lat_min, lat_max)})
+
+    thickness = ds[data_name].values.astype(np.float32)
+    lon = ds[lon_name].values
+    lat = ds[lat_name].values
+    ds.close()
+
+    ocean = thickness[thickness > 0]
+    print(f"  GlobSed: shape={thickness.shape}, "
+          f"mean={ocean.mean():.0f}m, max={ocean.max():.0f}m")
+    return {"thickness": thickness, "lon": lon, "lat": lat}
+
+
 def prepare_real_data_pipeline(region, ssv_file=None, gebco_file=None):
     """为卡尔曼滤波管线准备指定区域的真实数据。"""
     lon_min, lon_max, lat_min, lat_max = region

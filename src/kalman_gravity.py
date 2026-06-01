@@ -31,16 +31,25 @@ class KalmanGravityReconstructor:
         self._initialized = False
 
     def initialize(self, gravity_lr, gravity_ship=None,
-                   process_noise_std=1.0, sat_noise_std=2.0, ship_noise_std=0.5):
-        """初始化滤波器：上采样卫星数据作为初值，设定噪声参数。"""
+                   process_noise_std=1.0, sat_noise_std=2.0, ship_noise_std=0.5,
+                   ship_train_mask=None):
+        """初始化滤波器：上采样卫星数据作为初值，设定噪声参数。
+
+        ship_train_mask: 船载训练/验证拆分掩码 (True=用于约束, False=保留验证).
+                         避免船载数据既做初始状态又被重新观测的循环。
+        """
         from scipy.ndimage import zoom
         zoom_y = self.ny / gravity_lr.shape[0]
         zoom_x = self.nx / gravity_lr.shape[1]
         x0 = zoom(gravity_lr, (zoom_y, zoom_x), order=1)
 
         if gravity_ship is not None:
-            valid = ~np.isnan(gravity_ship)
-            x0[valid] = gravity_ship[valid]
+            if ship_train_mask is not None:
+                train = ship_train_mask & ~np.isnan(gravity_ship)
+                x0[train] = gravity_ship[train]
+            else:
+                valid = ~np.isnan(gravity_ship)
+                x0[valid] = gravity_ship[valid]
 
         self.x = x0.ravel()
         init_var = (process_noise_std ** 2) * np.ones(self.n_state)
@@ -50,6 +59,7 @@ class KalmanGravityReconstructor:
         self.R_ship_val = ship_noise_std ** 2
         self.gravity_lr = gravity_lr
         self.gravity_ship = gravity_ship
+        self.ship_train_mask = ship_train_mask
         self._initialized = True
         self._iter_count = 0
 
@@ -120,6 +130,8 @@ class KalmanGravityReconstructor:
             return
 
         valid_mask = ~np.isnan(self.gravity_ship)
+        if self.ship_train_mask is not None:
+            valid_mask = valid_mask & self.ship_train_mask
         valid_indices = np.where(valid_mask.ravel())[0]
         if len(valid_indices) == 0:
             print("  无有效船载观测点, 跳过更新")
@@ -241,7 +253,8 @@ class EnsembleKalmanGravityReconstructor:
         self._initialized = False
 
     def initialize(self, gravity_lr, gravity_ship=None,
-                   process_noise_std=1.0, sat_noise_std=2.0, ship_noise_std=0.5):
+                   process_noise_std=1.0, sat_noise_std=2.0, ship_noise_std=0.5,
+                   ship_train_mask=None):
         """初始化 EnKF 集合：以卫星数据上采样为均值，加随机扰动。"""
         from scipy.ndimage import zoom
         zoom_y = self.ny / gravity_lr.shape[0]
@@ -249,10 +262,18 @@ class EnsembleKalmanGravityReconstructor:
         x0 = zoom(gravity_lr, (zoom_y, zoom_x), order=1).ravel()
 
         if gravity_ship is not None:
-            valid = ~np.isnan(gravity_ship)
-            x0_2d = x0.reshape(self.ny, self.nx)
-            x0_2d[valid] = gravity_ship[valid]
-            x0 = x0_2d.ravel()
+            if ship_train_mask is not None:
+                train = ship_train_mask & ~np.isnan(gravity_ship)
+                x0_2d = x0.reshape(self.ny, self.nx)
+                x0_2d[train] = gravity_ship[train]
+                x0 = x0_2d.ravel()
+            else:
+                valid = ~np.isnan(gravity_ship)
+                x0_2d = x0.reshape(self.ny, self.nx)
+                x0_2d[valid] = gravity_ship[valid]
+                x0 = x0_2d.ravel()
+
+        self.ship_train_mask = ship_train_mask
 
         ensemble_std = process_noise_std * 2
         self.ensemble = np.random.randn(self.n_ensemble, self.n_state) * ensemble_std
@@ -308,6 +329,8 @@ class EnsembleKalmanGravityReconstructor:
             return
 
         valid_mask = ~np.isnan(self.gravity_ship)
+        if self.ship_train_mask is not None:
+            valid_mask = valid_mask & self.ship_train_mask
         valid_flat = self.gravity_ship.ravel()
         valid_indices = np.where(valid_mask.ravel())[0]
         n_obs = min(len(valid_indices), 500)
@@ -429,6 +452,36 @@ class KalmanBathymetryInverter:
         self.flexural_phi = phi
         print(f"Flexural isostasy configured (Te={Te/1000:.0f} km)")
 
+    def apply_sediment_correction(self, sediment_thickness, drho_sed=500,
+                                   interp_order=1):
+        """沉积重力校正：从观测重力中减去沉积层的重力效应。
+
+        沉积密度 (~2200 kg/m^3) 低于地壳密度 (~2670 kg/m^3)，
+        厚沉积层区域的重力会被压低。减去沉积效应后，剩余重力
+        仅反映基底地形，使 Parker 反演更准确。
+
+        Args:
+            sediment_thickness: 2D 沉积厚度 [m]
+            drho_sed: 沉积-地壳密度差绝对值 [kg/m^3], |2200-2670| ≈ 470
+            interp_order: 插值阶数 (GlobSed 5' → 目标格网)
+        """
+        from scipy.ndimage import zoom
+        sy = self.ny / sediment_thickness.shape[0]
+        sx = self.nx / sediment_thickness.shape[1]
+        sed_resampled = zoom(np.nan_to_num(sediment_thickness, nan=0),
+                             (sy, sx), order=interp_order)
+
+        from utils import sediment_gravity_correction
+        dg_sed = sediment_gravity_correction(
+            sed_resampled, drho_sed=drho_sed,
+            resolution_arcmin=self.region_size_deg * 60 / self.nx,
+            lat_center=self.lat_center)
+
+        self.gravity_obs = self.gravity_obs - dg_sed
+        print(f"  Sediment correction: max_dg={np.nanmax(dg_sed):.1f} mGal, "
+              f"mean_dg={np.nanmean(dg_sed[sed_resampled>0]):.1f} mGal "
+              f"(drho={drho_sed} kg/m^3)")
+
     def gravity_to_bathymetry_linear(self, gravity, d=None, drho=None, k_min=None, k_max=None):
         """Parker 线性反演: 重力异常 → 海底地形，含 Tikhonov 正则化和挠曲校正。"""
         if d is None:
@@ -481,8 +534,13 @@ class KalmanBathymetryInverter:
 
     def initialize(self, gravity_reconstructed, gravity_ship=None, bathy_ship=None,
                    bathymetry_prior=None, process_noise_std=50.0,
-                   observation_noise_std=5.0, drho_prior=None, d_prior=None):
-        """初始化水深反演器：线性 Parker 反演 + GEBCO/船载先验融合。"""
+                   observation_noise_std=5.0, drho_prior=None, d_prior=None,
+                   prior_mask=None):
+        """初始化水深反演器：线性 Parker 反演 + GEBCO/船载先验融合。
+
+        prior_mask: 布尔掩码，True=允许进入先验的区域 (如 TID=1 实测多波束区).
+                   在掩码外区域的 GEBCO 值不会被混入，避免循环验证。
+        """
         self.gravity_obs = gravity_reconstructed.copy()
         self.process_noise_std = process_noise_std
         self.obs_noise_std = observation_noise_std
@@ -518,15 +576,20 @@ class KalmanBathymetryInverter:
 
         if bathymetry_prior is not None:
             mask_prior = ~np.isnan(bathymetry_prior)
+            if prior_mask is not None:
+                mask_prior = mask_prior & prior_mask
             if bathy_ship is not None:
                 mask_s = ~np.isnan(bathy_ship)
-                # Blend GEBCO as weak prior (30%), not full replacement
                 blend_region = ~mask_s & mask_prior
                 x0[blend_region] = 0.7 * x0[blend_region] + 0.3 * bathymetry_prior[blend_region]
+                n_blend = blend_region.sum()
             else:
-                # Without shipborne, use GEBCO at 50% weight to avoid over-reliance
                 blend_region = mask_prior
                 x0[blend_region] = 0.5 * x0[blend_region] + 0.5 * bathymetry_prior[blend_region]
+                n_blend = blend_region.sum()
+            if n_blend > 0:
+                tag = "TID=1" if prior_mask is not None else "all GEBCO"
+                print(f"  GEBCO prior blended: {n_blend:,} pixels ({tag})")
 
         self.x = x0.ravel()
         self.P_diag = np.full(self.n_state, process_noise_std ** 2)

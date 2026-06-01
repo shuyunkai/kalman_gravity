@@ -16,7 +16,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from kalman_gravity import KalmanGravityReconstructor, KalmanBathymetryInverter
 from utils import (compute_metrics, print_metrics, plot_gravity_field,
                    plot_bathymetry, plot_residual, plot_scatter_compare,
-                   plot_error_histogram, interpolate_nans, bandpass_filter, compute_vgg)
+                   plot_error_histogram, interpolate_nans, bandpass_filter, compute_vgg,
+                   split_shipborne_mask)
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 OUTPUT_DIR = Path(__file__).parent.parent / "output_real"
@@ -243,12 +244,52 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     n_ship = np.sum(~np.isnan(ship_grav)) if ship_grav is not None else 0
     print(f"  Shipborne gravity points: {n_ship}")
 
-    print("\n[4/5] Kalman Filter Gravity Reconstruction...")
+    # Load GEBCO TID for independent validation
+    print("\n[3b/6] Loading GEBCO TID type identifier...")
+    prior_mask_hr = None
+    val_mask_hr = None
+    try:
+        from real_data import load_gebco_tid, tid_to_multibeam_mask
+        tid_info = load_gebco_tid(region=(lon_range[0], lon_range[1],
+                                          lat_range[0], lat_range[1]))
+        tid_data = tid_info["tid"]
+        mb_mask = tid_to_multibeam_mask(tid_data)
+        # Upsample TID mask to HR grid
+        mb_mask_hr = sp_zoom(mb_mask.astype(float),
+                             (ny_hr / mb_mask.shape[0], nx_hr / mb_mask.shape[1]),
+                             order=0) > 0.5
+        # 70/30 split for prior/validation within multibeam regions
+        rng = np.random.default_rng(42)
+        mb_idx = np.where(mb_mask_hr.ravel())[0]
+        rng.shuffle(mb_idx)
+        n_prior = int(len(mb_idx) * 0.7)
+        prior_mask_hr = np.zeros(ny_hr * nx_hr, dtype=bool)
+        val_mask_hr = np.zeros(ny_hr * nx_hr, dtype=bool)
+        prior_mask_hr[mb_idx[:n_prior]] = True
+        val_mask_hr[mb_idx[n_prior:]] = True
+        prior_mask_hr = prior_mask_hr.reshape(ny_hr, nx_hr)
+        val_mask_hr = val_mask_hr.reshape(ny_hr, nx_hr)
+        print(f"  TID multibeam pixels: {len(mb_idx):,} "
+              f"(prior={n_prior:,}, validation={len(mb_idx)-n_prior:,})")
+    except (FileNotFoundError, KeyError) as e:
+        print(f"  TID not available: {e} — GEBCO prior will be unrestricted")
+
+    # Shipborne train/val split
+    ship_train_mask = None
+    ship_val_mask = None
+    if n_ship > 100:
+        ship_train_mask, ship_val_mask = split_shipborne_mask(
+            ship_grav, validation_fraction=0.2)
+        print(f"  Shipborne split: train={ship_train_mask.sum():,}, "
+              f"val={ship_val_mask.sum():,}")
+
+    print("\n[4/6] Kalman Filter Gravity Reconstruction...")
     reconstructor = KalmanGravityReconstructor(
         grid_shape=(ny_hr, nx_hr), region_size_deg=lat_range[1] - lat_range[0],
         lr_grid_shape=(ny_lr, nx_lr))
     reconstructor.initialize(
         gravity_lr=gravity_lr, gravity_ship=ship_grav if n_ship > 0 else None,
+        ship_train_mask=ship_train_mask,
         process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
 
     t0 = time.time()
@@ -257,7 +298,7 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
 
     gravity_bilinear = zoom(gravity_lr, (upscale, upscale), order=1)
 
-    print("\n[5/5] Kalman Filter Bathymetry Inversion...")
+    print("\n[5/6] Kalman Filter Bathymetry Inversion...")
     inverter = KalmanBathymetryInverter(
         grid_shape=(ny_hr, nx_hr), region_size_deg=lat_range[1] - lat_range[0],
         lat_center=(lat_range[0] + lat_range[1]) / 2.0)
@@ -267,9 +308,20 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     inverter.depth_min = max(-11000, np.nanmin(bathy_prior_hr) - 500)
     inverter.depth_max = min(1000, np.nanmax(bathy_prior_hr) + 500)
     inverter.apply_flexural_isostasy(Te=10e3)
+
+    # Apply GlobSed sediment correction if available
+    try:
+        from real_data import load_globsed
+        globsed_info = load_globsed(region=(lon_range[0], lon_range[1],
+                                             lat_range[0], lat_range[1]))
+        inverter.apply_sediment_correction(globsed_info["thickness"], drho_sed=500)
+    except (FileNotFoundError, KeyError) as e:
+        print(f"  GlobSed not available: {e}")
+
     inverter.initialize(gravity_reconstructed=gravity_hr,
                         gravity_ship=ship_grav if n_ship > 0 else None,
                         bathy_ship=ship_bathy, bathymetry_prior=bathy_prior_hr,
+                        prior_mask=prior_mask_hr,
                         process_noise_std=80.0, observation_noise_std=5.0)
 
     bathymetry_kf = inverter.run(n_iterations=5, smooth_sigma=1.0)
@@ -279,11 +331,24 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     bathy_truth_hr = sp_zoom(bathy_gebco, (ny_hr / bathy_gebco.shape[0],
                                             nx_hr / bathy_gebco.shape[1]), order=1)
     m_g_kf = compute_metrics(gravity_hr, gravity_bilinear)
-    m_b_kf = compute_metrics(bathymetry_kf, bathy_truth_hr)
-    m_b_trad = compute_metrics(bathymetry_trad, bathy_truth_hr)
-    m_g_ship = compute_metrics(gravity_hr, ship_grav) if n_ship > 0 else None
+    # Independent validation on TID=1 held-out pixels
+    if val_mask_hr is not None and val_mask_hr.sum() > 100:
+        m_b_kf = compute_metrics(bathymetry_kf, bathy_truth_hr, mask=val_mask_hr)
+        m_b_trad = compute_metrics(bathymetry_trad, bathy_truth_hr, mask=val_mask_hr)
+        val_tag = f"[TID=1 独立验证, n={val_mask_hr.sum():,}]"
+    else:
+        m_b_kf = compute_metrics(bathymetry_kf, bathy_truth_hr)
+        m_b_trad = compute_metrics(bathymetry_trad, bathy_truth_hr)
+        val_tag = "[所有 GEBCO 像素]"
 
-    # 独立验证: 仅用船载水深（未参与反演）
+    # Gravity validation on held-out shipborne
+    if ship_val_mask is not None and ship_val_mask.sum() > 100:
+        m_g_ship_val = compute_metrics(
+            gravity_hr, ship_grav, mask=ship_val_mask)
+    else:
+        m_g_ship_val = None
+
+    # Independent bathy validation on shipborne (never used in KF)
     n_bathy_ship = np.sum(~np.isnan(ship_bathy)) if ship_bathy is not None else 0
     m_b_kf_ship = None
     m_b_trad_ship = None
@@ -296,10 +361,11 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     print("  RESULTS")
     print("=" * 60)
     print(f"  Gravity KF mean/std: {gravity_hr.mean():.1f} / {gravity_hr.std():.1f} mGal")
-    if m_g_ship:
-        print(f"  Gravity KF vs Ship RMSE: {m_g_ship['RMSE']:.1f} mGal")
+    if m_g_ship_val:
+        print(f"  Gravity KF vs Ship (验证) RMSE: {m_g_ship_val['RMSE']:.1f} mGal "
+              f"[n={m_g_ship_val.get('N', '?')}]")
     print(f"  Bathymetry KF mean: {bathymetry_kf.mean():.0f} m")
-    print(f"  Bathymetry RMSE vs GEBCO: {m_b_kf['RMSE']:.0f} m (KF) vs {m_b_trad['RMSE']:.0f} m (Parker)")
+    print(f"  Bathymetry RMSE {val_tag}: {m_b_kf['RMSE']:.0f} m (KF) vs {m_b_trad['RMSE']:.0f} m (Parker)")
     if m_b_kf_ship:
         print(f"  Bathymetry RMSE vs 船载(独立): {m_b_kf_ship['RMSE']:.0f} m (KF) vs {m_b_trad_ship['RMSE']:.0f} m (Parker)")
 

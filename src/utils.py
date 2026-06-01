@@ -149,6 +149,65 @@ def interpolate_nans(data, method="nearest"):
     return data_filled
 
 
+def split_shipborne_mask(shipborne_data, validation_fraction=0.2, seed=42):
+    """将船载格网数据随机拆分为训练集和验证集掩码。
+
+    训练子集: 用于 KF 约束
+    验证子集: 保留为独立评估, 永不被观测
+
+    Args:
+        shipborne_data: 2D array with NaN for no-data pixels
+        validation_fraction: 保留为验证的比例 (默认 0.2)
+        seed: 随机种子
+
+    Returns:
+        train_mask, val_mask: 两个 boolean 2D arrays
+    """
+    valid_mask = ~np.isnan(shipborne_data)
+    valid_indices = np.where(valid_mask.ravel())[0]
+    n_total = len(valid_indices)
+    if n_total < 10:
+        return valid_mask, np.zeros_like(valid_mask, dtype=bool)
+
+    rng = np.random.default_rng(seed)
+    rng.shuffle(valid_indices)
+    n_val = max(1, int(n_total * validation_fraction))
+    val_indices = valid_indices[:n_val]
+    train_indices = valid_indices[n_val:]
+
+    train_mask = np.zeros(shipborne_data.size, dtype=bool)
+    val_mask = np.zeros(shipborne_data.size, dtype=bool)
+    train_mask[train_indices] = True
+    val_mask[val_indices] = True
+    return (train_mask.reshape(shipborne_data.shape),
+            val_mask.reshape(shipborne_data.shape))
+
+
+def sediment_gravity_correction(sediment_thickness, drho_sed=500,
+                                 resolution_arcmin=1.0, lat_center=0):
+    """计算沉积层的重力效应 (无限板近似 + 纬度校正)。
+
+    dg_sed = 2 * pi * G * drho_sed * thickness  [m/s^2]
+    转换为 mGal: * 1e5
+
+    drho_sed = rho_sediment - rho_crust ≈ 2200 - 2670 = -470 kg/m^3
+    负值表示沉积物比地壳轻，减少了总重力信号。
+    返回正值的"校正量" (从观测中减去以得到基底重力)。
+
+    Args:
+        sediment_thickness: 2D array, 沉积厚度 [m]
+        drho_sed: 沉积-地壳密度差绝对值 [kg/m^3], 默认 500 (= |2200-2670| ≈ 470)
+        resolution_arcmin: 格网分辨率 (仅用于信息)
+        lat_center: 中心纬度 (保留参数)
+
+    Returns:
+        dg_correction: 重力校正量 [mGal], 正值 (从观测重力中减去)
+    """
+    G = 6.674e-11
+    dg_si = 2 * np.pi * G * drho_sed * sediment_thickness
+    return dg_si * 1e5  # mGal
+
+
 def plot_gravity_field(data_list, titles, save_path=None, figsize=(18, 5)):
     """并排绘制多个重力场图。"""
     n = len(data_list)

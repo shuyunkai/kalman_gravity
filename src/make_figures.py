@@ -15,7 +15,7 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
 sys.path.insert(0, str(Path(__file__).parent))
-from utils import compute_metrics
+from utils import compute_metrics, split_shipborne_mask
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 OUTPUT_DIR = Path(__file__).parent.parent / "output_figures"
@@ -211,12 +211,15 @@ def _load_japan_data(upscale=4):
 
     recon = KalmanGravityReconstructor(grid_shape=(ny_hr, nx_hr), region_size_deg=16,
                                         lr_grid_shape=(ny_lr, nx_lr))
+    ship_train_mask, ship_val_mask = split_shipborne_mask(ship_hr, validation_fraction=0.2)
     recon.initialize(gravity_lr=grav_lr, gravity_ship=ship_hr,
+                     ship_train_mask=ship_train_mask,
                      process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
     grav_kf = recon.run(n_iterations=6, smooth_sigma=0.8)
     grav_bi = zoom(grav_lr, (upscale, upscale), order=1)
 
-    result = (grav_lr, grav_kf, grav_bi, ship_hr, ship_lon, ship_lat, lon_hr, lat_hr, lon_range, lat_range)
+    result = (grav_lr, grav_kf, grav_bi, ship_hr, ship_lon, ship_lat, lon_hr, lat_hr,
+              lon_range, lat_range, ship_val_mask)
     _japan_cache[upscale] = result
     return result
 
@@ -224,8 +227,8 @@ def _load_japan_data(upscale=4):
 def fig3_regional_zoom():
     """图3: 日本海沟超分辨率六图对比（卫星/双线性/KF/船载/残差）。"""
     print("[Fig 3] Regional Super-Resolution (Japan Trench)...")
-    grav_lr, grav_kf, grav_bi, ship_hr, ship_lon, ship_lat, lon_hr, lat_hr, lon_range, lat_range = \
-        _load_japan_data(upscale=4)
+    (grav_lr, grav_kf, grav_bi, ship_hr, ship_lon, ship_lat, lon_hr, lat_hr,
+     lon_range, lat_range, ship_val_mask) = _load_japan_data(upscale=4)
 
     fig, axes = plt.subplots(2, 3, figsize=(16, 10))
     vmin, vmax = -300, 300
@@ -246,29 +249,30 @@ def fig3_regional_zoom():
         ax.set_ylabel("纬度")
         plt.colorbar(im, ax=ax, shrink=0.8)
 
-    m_kf_ship = compute_metrics(grav_kf, ship_hr)
-    m_bi_ship = compute_metrics(grav_bi, ship_hr)
-    fig.suptitle(f"日本海沟超分辨率重建\n"
+    m_kf_ship = compute_metrics(grav_kf, ship_hr, mask=ship_val_mask)
+    m_bi_ship = compute_metrics(grav_bi, ship_hr, mask=ship_val_mask)
+    fig.suptitle(f"日本海沟超分辨率重建 [保留船载验证]\n"
                  f"KF vs 船载 RMSE: {m_kf_ship['RMSE']:.1f} mGal  |  "
                  f"双线性 vs 船载 RMSE: {m_bi_ship['RMSE']:.1f} mGal",
                  fontsize=13, fontweight="bold")
     plt.tight_layout()
     plt.savefig(OUTPUT_DIR / "fig3_japan_super_resolution.png", dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"  KF vs Ship RMSE: {m_kf_ship['RMSE']:.1f} mGal")
-    print(f"  Bilinear vs Ship RMSE: {m_bi_ship['RMSE']:.1f} mGal")
+    print(f"  KF vs Ship (val) RMSE: {m_kf_ship['RMSE']:.1f} mGal")
+    print(f"  Bilinear vs Ship (val) RMSE: {m_bi_ship['RMSE']:.1f} mGal")
     print(f"  Saved: fig3_japan_super_resolution.png")
 
 
 def fig4_scatter_and_histogram():
     """图4: 散点对比 + 误差直方图 + 空间残差 + KF改进量。"""
     print("[Fig 4] Scatter & Histogram...")
-    grav_lr, grav_kf, grav_bi, ship_hr, ship_lon, ship_lat, lon_hr, lat_hr, lon_range, lat_range = \
-        _load_japan_data(upscale=4)
+    (grav_lr, grav_kf, grav_bi, ship_hr, ship_lon, ship_lat, lon_hr, lat_hr,
+     lon_range, lat_range, ship_val_mask) = _load_japan_data(upscale=4)
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
 
-    mask = ~np.isnan(ship_hr)
+    # Only use validation (held-out) shipborne points for metrics
+    mask = ship_val_mask & ~np.isnan(ship_hr)
     kf_vals = grav_kf[mask].ravel()
     bi_vals = grav_bi[mask].ravel()
     ship_vals = ship_hr[mask].ravel()
@@ -399,10 +403,33 @@ def fig6_bathymetry_inversion():
     ds_b.close()
 
     from scipy.ndimage import zoom as sp_zoom
-    grav_lr, grav_kf, _, ship_hr, _, _, lon_hr, lat_hr, lon_range, lat_range = \
-        _load_japan_data(upscale=4)
+    (grav_lr, grav_kf, _, ship_hr, _, _, lon_hr, lat_hr,
+     lon_range, lat_range, ship_val_mask) = _load_japan_data(upscale=4)
     from kalman_gravity import KalmanBathymetryInverter
     ny_hr, nx_hr = grav_kf.shape
+
+    # Load TID for independent prior/validation split
+    val_mask_fig6 = None
+    prior_mask_fig6 = None
+    try:
+        from real_data import load_gebco_tid, tid_to_multibeam_mask
+        tid_info = load_gebco_tid(region=(138, 152, 32, 48))
+        mb = tid_to_multibeam_mask(tid_info["tid"])
+        mb_hr = sp_zoom(mb.astype(float), (ny_hr / mb.shape[0], nx_hr / mb.shape[1]),
+                        order=0) > 0.5
+        rng = np.random.default_rng(42)
+        mb_idx = np.where(mb_hr.ravel())[0]
+        rng.shuffle(mb_idx)
+        n_p = int(len(mb_idx) * 0.7)
+        prior_mask_fig6 = np.zeros(ny_hr * nx_hr, dtype=bool)
+        val_mask_fig6 = np.zeros(ny_hr * nx_hr, dtype=bool)
+        prior_mask_fig6[mb_idx[:n_p]] = True
+        val_mask_fig6[mb_idx[n_p:]] = True
+        prior_mask_fig6 = prior_mask_fig6.reshape(ny_hr, nx_hr)
+        val_mask_fig6 = val_mask_fig6.reshape(ny_hr, nx_hr)
+        print(f"  Fig6 TID multibeam: {len(mb_idx):,} pixels (prior={n_p:,}, val={len(mb_idx)-n_p:,})")
+    except (FileNotFoundError, KeyError) as e:
+        print(f"  Fig6 TID not available: {e}")
 
     bathy_gebco_hr = sp_zoom(bathy, (ny_hr / bathy.shape[0], nx_hr / bathy.shape[1]), order=1)
     inverter = KalmanBathymetryInverter(
@@ -410,6 +437,7 @@ def fig6_bathymetry_inversion():
         lat_center=(lat_range[0] + lat_range[1]) / 2.0)
     inverter.apply_flexural_isostasy(Te=10e3)
     inverter.initialize(gravity_reconstructed=grav_kf, bathymetry_prior=bathy_gebco_hr,
+                        prior_mask=prior_mask_fig6,
                         process_noise_std=80.0, observation_noise_std=5.0)
     bathy_kf = inverter.run(n_iterations=5, smooth_sigma=1.0)
     bathy_parker = inverter.gravity_to_bathymetry_linear(
@@ -437,9 +465,15 @@ def fig6_bathymetry_inversion():
         ax.set_ylabel("纬度")
         plt.colorbar(im, ax=ax, shrink=0.8)
 
-    m_kf = compute_metrics(bathy_kf, bathy_gebco_hr)
-    m_p = compute_metrics(bathy_parker, bathy_gebco_hr)
-    fig.suptitle(f"日本海沟水深反演\n"
+    if val_mask_fig6 is not None and val_mask_fig6.sum() > 100:
+        m_kf = compute_metrics(bathy_kf, bathy_gebco_hr, mask=val_mask_fig6)
+        m_p = compute_metrics(bathy_parker, bathy_gebco_hr, mask=val_mask_fig6)
+        val_note = f"[TID=1独立验证, n={val_mask_fig6.sum():,}]"
+    else:
+        m_kf = compute_metrics(bathy_kf, bathy_gebco_hr)
+        m_p = compute_metrics(bathy_parker, bathy_gebco_hr)
+        val_note = "[所有GEBCO像素]"
+    fig.suptitle(f"日本海沟水深反演 {val_note}\n"
                  f"KF RMSE: {m_kf['RMSE']:.0f} m, Parker RMSE: {m_p['RMSE']:.0f} m",
                  fontsize=12, fontweight="bold")
     plt.tight_layout()

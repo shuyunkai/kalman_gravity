@@ -13,7 +13,7 @@ matplotlib.use("Agg")
 sys.path.insert(0, str(Path(__file__).parent))
 
 from kalman_gravity import KalmanGravityReconstructor, KalmanBathymetryInverter
-from utils import compute_metrics, compute_vgg
+from utils import compute_metrics, compute_vgg, split_shipborne_mask
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 OUTPUT_DIR = Path(__file__).parent.parent / "output_global"
@@ -109,6 +109,7 @@ def create_global_gravity_model(tile_size_lat=10):
     n_total = n_lat * n_lon
 
     gravity_kf = gravity_global.copy()
+    tile_val_metrics = []
     t0 = time.time()
     done = 0
 
@@ -149,17 +150,29 @@ def create_global_gravity_model(tile_size_lat=10):
 
             # Tile with shipborne data: full KF. Without: adaptive smoothing.
             if ship_tile is not None:
-                lr_ny = max(4, tile_ny // 2)
-                lr_nx = max(4, tile_nx // 2)
-                grav_lr = zoom(grav_tile, (lr_ny/tile_ny, lr_nx/tile_nx), order=1)
+                # Use original SSV 1' as satellite observation (1:1 mapping)
+                # — no self-downsampling, no circularity
                 reconstructor = KalmanGravityReconstructor(
                     grid_shape=(tile_ny, tile_nx), region_size_deg=tile_size_lat,
-                    lr_grid_shape=(lr_ny, lr_nx))
+                    lr_grid_shape=(tile_ny, tile_nx))
+                ship_train_mask, ship_val_mask = split_shipborne_mask(
+                    ship_tile, validation_fraction=0.2)
+                n_train = ship_train_mask.sum()
+                n_val = ship_val_mask.sum()
                 reconstructor.initialize(
-                    gravity_lr=grav_lr, gravity_ship=ship_tile,
+                    gravity_lr=grav_tile.copy(), gravity_ship=ship_tile,
+                    ship_train_mask=ship_train_mask,
                     process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
                 gravity_kf[i0:i1, j0:j1] = reconstructor.run(
                     n_iterations=3, smooth_sigma=0.6, verbose=False)
+                if n_val > 100:
+                    tile_val_metrics.append({
+                        'i_lat': i_lat, 'i_lon': i_lon,
+                        'n_train': n_train, 'n_val': n_val,
+                        'val_rmse': float(np.sqrt(np.mean(
+                            (gravity_kf[i0:i1, j0:j1][ship_val_mask] -
+                             ship_tile[ship_val_mask]) ** 2)))
+                    })
             else:
                 grav_smoothed = gaussian_filter(grav_tile, sigma=0.8)
                 gy, gx = np.gradient(grav_tile)
@@ -176,6 +189,14 @@ def create_global_gravity_model(tile_size_lat=10):
 
     elapsed = time.time() - t0
     print(f"  Completed {done} tiles in {elapsed/60:.1f} min")
+
+    if tile_val_metrics:
+        val_rmses = [m['val_rmse'] for m in tile_val_metrics]
+        print(f"\n  Shipborne independent validation (80/20 split):")
+        print(f"  Tiles with held-out data: {len(tile_val_metrics)}")
+        print(f"  Validation RMSE: mean={np.mean(val_rmses):.1f}, "
+              f"median={np.median(val_rmses):.1f}, "
+              f"min={np.min(val_rmses):.1f}, max={np.max(val_rmses):.1f} mGal")
 
     print("\n[4/4] Computing VGG and saving...")
     vgg_kf = compute_vgg(gravity_kf, 1.0 / 60, lat=lat_ssv)
