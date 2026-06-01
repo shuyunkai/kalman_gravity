@@ -183,25 +183,21 @@ def split_shipborne_mask(shipborne_data, validation_fraction=0.2, seed=42):
             val_mask.reshape(shipborne_data.shape))
 
 
-def sediment_gravity_correction(sediment_thickness, drho_sed=500,
-                                 resolution_arcmin=1.0, lat_center=0):
-    """计算沉积层的重力效应 (无限板近似 + 纬度校正)。
+def sediment_gravity_correction(sediment_thickness, drho_sed=500):
+    """计算沉积层的重力效应 (无限板近似)。
 
     dg_sed = 2 * pi * G * drho_sed * thickness  [m/s^2]
     转换为 mGal: * 1e5
 
-    drho_sed = rho_sediment - rho_crust ≈ 2200 - 2670 = -470 kg/m^3
-    负值表示沉积物比地壳轻，减少了总重力信号。
-    返回正值的"校正量" (从观测中减去以得到基底重力)。
+    drho_sed = |rho_sediment - rho_crust| ≈ |2200 - 2670| = 470 kg/m^3
+    返回正值的"校正量" (从观测重力中减去以得到基底重力)。
 
     Args:
         sediment_thickness: 2D array, 沉积厚度 [m]
-        drho_sed: 沉积-地壳密度差绝对值 [kg/m^3], 默认 500 (= |2200-2670| ≈ 470)
-        resolution_arcmin: 格网分辨率 (仅用于信息)
-        lat_center: 中心纬度 (保留参数)
+        drho_sed: 沉积-地壳密度差绝对值 [kg/m^3], 默认 500
 
     Returns:
-        dg_correction: 重力校正量 [mGal], 正值 (从观测重力中减去)
+        dg_correction: 重力校正量 [mGal], 正值
     """
     G = 6.674e-11
     dg_si = 2 * np.pi * G * drho_sed * sediment_thickness

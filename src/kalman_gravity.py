@@ -331,12 +331,9 @@ class EnsembleKalmanGravityReconstructor:
                 if n_block == 0:
                     continue
 
-                H = np.zeros((1, self.n_state))
-                H[0, block_mask] = 1.0 / n_block
-
                 y_ens = (self.ensemble[:, block_mask].mean(axis=1)
                          + self.rng.standard_normal(self.n_ensemble) * self.sat_noise_std)
-                self._enkf_update_scalar(H[0], y_ens, self.gravity_lr[i, j], self.sat_noise_std ** 2)
+                self._enkf_update_scalar(y_ens, self.gravity_lr[i, j], self.sat_noise_std ** 2)
 
     def update_shipborne(self):
         """EnKF 更新-船载观测：逐有效船载点标量观测更新。"""
@@ -358,13 +355,11 @@ class EnsembleKalmanGravityReconstructor:
 
         for idx in valid_indices:
             z = valid_flat[idx]
-            H = np.zeros(self.n_state)
-            H[idx] = 1.0
             y_ens = (self.ensemble[:, idx]
                      + self.rng.standard_normal(self.n_ensemble) * self.ship_noise_std)
-            self._enkf_update_scalar(H, y_ens, z, self.ship_noise_std ** 2)
+            self._enkf_update_scalar(y_ens, z, self.ship_noise_std ** 2)
 
-    def _enkf_update_scalar(self, H, y_ens, z, R):
+    def _enkf_update_scalar(self, y_ens, z, R):
         """单点标量观测的 EnKF 更新（随机扰动法）。"""
         x_mean = self.ensemble.mean(axis=0)
         y_mean = y_ens.mean()
@@ -487,9 +482,7 @@ class KalmanBathymetryInverter:
                              (sy, sx), order=interp_order)
 
         dg_sed = _sediment_gravity_correction(
-            sed_resampled, drho_sed=drho_sed,
-            resolution_arcmin=self.region_size_deg * 60 / self.nx,
-            lat_center=self.lat_center)
+            sed_resampled, drho_sed=drho_sed)
 
         self.gravity_obs = self.gravity_obs - dg_sed
         print(f"  Sediment correction: max_dg={np.nanmax(dg_sed):.1f} mGal, "
