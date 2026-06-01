@@ -26,12 +26,20 @@ NC_ENGINE = "h5netcdf"
 def load_shipborne_all():
     """加载全部船载重力格网数据，返回散点数组 (lon, lat, gravity)。首次加载后缓存。"""
     cache_file = DATA_DIR / "shipborne_cache.npy"
-    if cache_file.exists():
-        pts = np.load(cache_file)
-        print(f"  Loaded {len(pts):,} shipborne points from cache")
-        return pts
-
     ship_dir = DATA_DIR / "shipborne"
+    # Check cache freshness: compare file count and newest mtime
+    if cache_file.exists():
+        grd_files = sorted(
+            list(ship_dir.rglob("*.grd.gz")) + list(ship_dir.rglob("*.grd")))
+        grd_files = [f for f in grd_files if not f.parent.name.startswith("_")]
+        cache_mtime = os.path.getmtime(cache_file)
+        newest_data = max((f.stat().st_mtime for f in grd_files), default=0)
+        if newest_data <= cache_mtime:
+            pts = np.load(cache_file)
+            print(f"  Loaded {len(pts):,} shipborne points from cache")
+            return pts
+        print(f"  Cache outdated (new data found), rebuilding...")
+
     all_points = []
 
     for cruise_dir in ship_dir.iterdir():
@@ -46,7 +54,9 @@ def load_shipborne_all():
                 continue
 
             try:
-                tmp = tempfile.NamedTemporaryFile(suffix=".grd", delete=False)
+                tmp = tempfile.NamedTemporaryFile(
+                    suffix=".grd", delete=False,
+                    prefix=f"grd_{os.getpid()}_")
                 if str(f).endswith(".gz"):
                     tmp.write(gzip.open(str(f), "rb").read())
                 else:
@@ -77,8 +87,8 @@ def load_shipborne_all():
                     pts = np.column_stack([lon2d[valid], lat2d[valid], data[valid]])
                     all_points.append(pts)
                     print(f"  {f.name}: {valid.sum():,} points")
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"  Warning: skip {f.name}: {e}")
 
     if all_points:
         all_pts = np.vstack(all_points)
@@ -301,7 +311,9 @@ def super_resolve_regions_with_shipborne(gravity_1min, lon_1min, lat_1min, upsca
                 continue
 
             try:
-                tmp = tempfile.NamedTemporaryFile(suffix=".grd", delete=False)
+                tmp = tempfile.NamedTemporaryFile(
+                    suffix=".grd", delete=False,
+                    prefix=f"grd_{os.getpid()}_")
                 tmp.write(gzip.open(str(f), "rb").read())
                 tmp.close()
 
@@ -379,7 +391,7 @@ def super_resolve_regions_with_shipborne(gravity_1min, lon_1min, lat_1min, upsca
                     "gravity_sr": gravity_sr, "lon_hr": lon_hr, "lat_hr": lat_hr,
                     "lon_lr": region_lon, "lat_lr": region_lat, "n_ship": n_ship}
             except Exception as e:
-                print(f"  Skip {f.name}: {e}")
+                print(f"  Warning: skip {f.name}: {e}")
 
     print(f"\n  Super-resolved {len(results)} regions")
 

@@ -252,7 +252,8 @@ def _parse_mgd77_gravity(filepath):
     try:
         df = pd.read_csv(filepath, sep=r"\s+", comment="#")
         return {"lon": df.iloc[:, 0].values, "lat": df.iloc[:, 1].values, "gravity": df.iloc[:, 2].values}
-    except Exception:
+    except Exception as e:
+        print(f"  Warning: MGD77 gravity parse failed for {filepath}: {e}")
         return None
 
 
@@ -262,7 +263,8 @@ def _parse_mgd77_bathymetry(filepath):
     try:
         df = pd.read_csv(filepath, sep=r"\s+", comment="#")
         return {"lon": df.iloc[:, 0].values, "lat": df.iloc[:, 1].values, "bathymetry": df.iloc[:, 2].values}
-    except Exception:
+    except Exception as e:
+        print(f"  Warning: MGD77 bathymetry parse failed for {filepath}: {e}")
         return None
 
 

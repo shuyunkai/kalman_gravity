@@ -202,8 +202,8 @@ def load_shipborne_gravity(lon_grid, lat_grid):
                         bathy_points.append(pt)
 
                 print(f"  Loaded {f.name}: {len(idx[0])} points (from {n_valid:,})")
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"  Warning: skip {f.name}: {e}")
 
     lon_mesh, lat_mesh = np.meshgrid(lon_grid, lat_grid)
     ship_grav = np.full(lon_mesh.shape, np.nan)

@@ -166,8 +166,8 @@ def fig2_shipborne_distribution():
                 ax.plot(lon.min(), lat.min(), "o", color=color, markersize=3,
                         transform=ccrs.PlateCarree(), label=label)
                 c_idx += 1
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"  Warning: skip {f.name} in Fig2: {e}")
 
     ax.legend(loc="lower left", fontsize=6, ncol=2)
     ax.set_title("船载重力数据空间分布", fontsize=14, fontweight="bold")

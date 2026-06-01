@@ -3,6 +3,8 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 import warnings
 
+from utils import sediment_gravity_correction as _sediment_gravity_correction
+
 warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*overflow.*")
 
 
@@ -79,7 +81,9 @@ class KalmanGravityReconstructor:
 
         factor = 1.0 + smooth_sigma * 0.1
         self.P_diag = self.P_diag * factor + self.Q_diag
-        self.P_diag = np.minimum(self.P_diag, 100.0 * np.median(self.P_diag[self.P_diag > 0] + 1e-10))
+        positive = self.P_diag[self.P_diag > 0]
+        cap = 100.0 * (np.median(positive) + 1e-10) if positive.size > 0 else 1e10
+        self.P_diag = np.minimum(self.P_diag, cap)
 
     def update_satellite(self):
         """更新步-卫星观测：用低分辨率格网约束高分辨率重建结果。
@@ -244,12 +248,14 @@ class EnsembleKalmanGravityReconstructor:
     内存消耗为 O(n_state * n_lr)，>100×100 格网请用标准 KF。
     """
 
-    def __init__(self, grid_shape, region_size_deg, n_ensemble=50):
+    def __init__(self, grid_shape, region_size_deg, n_ensemble=50, seed=42):
         self.grid_shape = grid_shape
         self.ny, self.nx = grid_shape
         self.n_state = self.ny * self.nx
         self.region_size_deg = region_size_deg
         self.n_ensemble = n_ensemble
+        self.seed = seed
+        self.rng = np.random.default_rng(seed)
         self.ensemble = None
         self._initialized = False
 
@@ -276,8 +282,16 @@ class EnsembleKalmanGravityReconstructor:
 
         self.ship_train_mask = ship_train_mask
 
+        # Memory check: ensemble is (n_ensemble, n_state) float64
+        mem_gb = self.n_ensemble * self.n_state * 8 / (1024**3)
+        if mem_gb > 8:
+            raise MemoryError(
+                f"EnKF ensemble requires {mem_gb:.1f} GB memory "
+                f"({self.n_ensemble}x{self.n_state}). Use standard KF instead.")
+
         ensemble_std = process_noise_std * 2
-        self.ensemble = np.random.randn(self.n_ensemble, self.n_state) * ensemble_std
+        self.ensemble = self.rng.standard_normal(
+            (self.n_ensemble, self.n_state)) * ensemble_std
         self.ensemble += x0[None, :]
 
         self.gravity_lr = gravity_lr
@@ -295,7 +309,7 @@ class EnsembleKalmanGravityReconstructor:
             x_2d = self.ensemble[m].reshape(self.ny, self.nx)
             x_smooth = gaussian_filter(x_2d, sigma=smooth_sigma)
             self.ensemble[m] = x_smooth.ravel()
-            self.ensemble[m] += np.random.randn(self.n_state) * self.process_noise_std * 0.3
+            self.ensemble[m] += self.rng.standard_normal(self.n_state) * self.process_noise_std * 0.3
 
     def update_satellite(self):
         """EnKF 更新-卫星观测：逐低分辨率像元标量观测更新每个集合成员。"""
@@ -321,7 +335,7 @@ class EnsembleKalmanGravityReconstructor:
                 H[0, block_mask] = 1.0 / n_block
 
                 y_ens = (self.ensemble[:, block_mask].mean(axis=1)
-                         + np.random.randn(self.n_ensemble) * self.sat_noise_std)
+                         + self.rng.standard_normal(self.n_ensemble) * self.sat_noise_std)
                 self._enkf_update_scalar(H[0], y_ens, self.gravity_lr[i, j], self.sat_noise_std ** 2)
 
     def update_shipborne(self):
@@ -347,7 +361,7 @@ class EnsembleKalmanGravityReconstructor:
             H = np.zeros(self.n_state)
             H[idx] = 1.0
             y_ens = (self.ensemble[:, idx]
-                     + np.random.randn(self.n_ensemble) * self.ship_noise_std)
+                     + self.rng.standard_normal(self.n_ensemble) * self.ship_noise_std)
             self._enkf_update_scalar(H, y_ens, z, self.ship_noise_std ** 2)
 
     def _enkf_update_scalar(self, H, y_ens, z, R):
@@ -397,7 +411,7 @@ class KalmanBathymetryInverter:
         self.ny, self.nx = grid_shape
         self.n_state = self.ny * self.nx
         self.region_size_deg = region_size_deg
-        self.dx = region_size_deg / self.nx
+        self.dx_deg = region_size_deg / self.nx
         self.lat_center = lat_center
 
         self.G = 6.674e-11
@@ -411,7 +425,7 @@ class KalmanBathymetryInverter:
 
     def _compute_wavenumbers(self):
         """计算傅里叶域波数网格 (rad/m)，含纬度校正 cos(lat)。"""
-        dx_deg = self.dx
+        dx_deg = self.dx_deg
         dy_deg = self.region_size_deg / self.ny
         cos_lat = np.cos(np.radians(self.lat_center))
         dx_m = dx_deg * 111320 * cos_lat
@@ -472,8 +486,7 @@ class KalmanBathymetryInverter:
         sed_resampled = zoom(np.nan_to_num(sediment_thickness, nan=0),
                              (sy, sx), order=interp_order)
 
-        from utils import sediment_gravity_correction
-        dg_sed = sediment_gravity_correction(
+        dg_sed = _sediment_gravity_correction(
             sed_resampled, drho_sed=drho_sed,
             resolution_arcmin=self.region_size_deg * 60 / self.nx,
             lat_center=self.lat_center)
@@ -608,7 +621,9 @@ class KalmanBathymetryInverter:
         self.x = x_pred.ravel()
         factor = 1.0 + smooth_sigma * 0.05
         self.P_diag = self.P_diag * factor + self.process_noise_std ** 2
-        self.P_diag = np.minimum(self.P_diag, 100.0 * np.median(self.P_diag[self.P_diag > 0] + 1e-10))
+        positive = self.P_diag[self.P_diag > 0]
+        cap = 100.0 * (np.median(positive) + 1e-10) if positive.size > 0 else 1e10
+        self.P_diag = np.minimum(self.P_diag, cap)
 
     def update_gravity(self, max_iter=50, lr=0.3):
         """迭代反演：用 Parker 正演残差成像更新水深估计。
