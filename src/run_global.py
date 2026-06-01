@@ -1,5 +1,5 @@
 """全球重力场模型构建：分块自适应卡尔曼平滑 + 船载数据超分辨率。"""
-import sys, os, time, gzip, tempfile
+import sys, os, time, gzip, tempfile, re
 from pathlib import Path
 
 import numpy as np
@@ -18,11 +18,19 @@ from utils import compute_metrics, compute_vgg
 DATA_DIR = Path(__file__).parent.parent / "data"
 OUTPUT_DIR = Path(__file__).parent.parent / "output_global"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+SR_DIR = Path(__file__).parent.parent / "output_super_resolution"
+SR_DIR.mkdir(parents=True, exist_ok=True)
 NC_ENGINE = "h5netcdf"
 
 
 def load_shipborne_all():
-    """加载全部船载重力格网数据，返回散点数组 (lon, lat, gravity)。"""
+    """加载全部船载重力格网数据，返回散点数组 (lon, lat, gravity)。首次加载后缓存。"""
+    cache_file = DATA_DIR / "shipborne_cache.npy"
+    if cache_file.exists():
+        pts = np.load(cache_file)
+        print(f"  Loaded {len(pts):,} shipborne points from cache")
+        return pts
+
     ship_dir = DATA_DIR / "shipborne"
     all_points = []
 
@@ -33,7 +41,7 @@ def load_shipborne_all():
             fname = f.name.lower()
             is_grav = any(kw in fname for kw in [
                 "faa", "free_air", "free-air", "_gravity", "residual",
-                "maba", "rmba", "bouguer"])
+                "maba", "rmba", "bouguer", "ba."])
             if not is_grav:
                 continue
 
@@ -65,17 +73,19 @@ def load_shipborne_all():
     if all_points:
         all_pts = np.vstack(all_points)
         print(f"\nTotal shipborne points: {all_pts.shape[0]:,}")
+        np.save(cache_file, np.asarray(all_pts, dtype=np.float32))
+        print(f"  Cached to {cache_file}")
         return all_pts
     return None
 
 
-def create_global_gravity_model(tile_size_lat=20):
-    """构建全球 1' 卡尔曼滤波重力场模型，分块处理 144 块。"""
+def create_global_gravity_model(tile_size_lat=10):
+    """构建全球 1' 卡尔曼滤波重力场模型，每块执行完整 KF 预测-更新。"""
     print("=" * 60)
     print("  GLOBAL KALMAN FILTER GRAVITY FIELD - 1 arc-min")
     print("=" * 60)
 
-    print("\n[1/3] Loading SSV33.1 global gravity...")
+    print("\n[1/4] Loading SSV33.1 global gravity...")
     grav_path = DATA_DIR / "ssv32" / "grav_33.1.nc"
     curv_path = DATA_DIR / "ssv32" / "curv_33.1.nc"
 
@@ -91,7 +101,10 @@ def create_global_gravity_model(tile_size_lat=20):
     print(f"  Gravity shape: {gravity_global.shape}")
     print(f"  Lat: [{lat_ssv.min():.1f}, {lat_ssv.max():.1f}]")
 
-    print("\n[2/3] Adaptive Kalman smoothing by tiles...")
+    print("\n[2/4] Loading shipborne gravity data...")
+    ship_pts = load_shipborne_all()
+
+    print("\n[3/4] KF per tile (predict+update_satellite+update_shipborne)...")
     ny, nx = gravity_global.shape
     lat_tile_size = int(tile_size_lat * 60)
     lon_tile_size = lat_tile_size
@@ -111,25 +124,63 @@ def create_global_gravity_model(tile_size_lat=20):
             j1 = min(j0 + lon_tile_size, nx)
             done += 1
 
+            tile_ny = i1 - i0
+            tile_nx = j1 - j0
             grav_tile = gravity_global[i0:i1, j0:j1].copy()
-            grav_smoothed = gaussian_filter(grav_tile, sigma=0.8)
 
-            gy, gx = np.gradient(grav_tile)
-            grad_norm = np.sqrt(gy ** 2 + gx ** 2)
-            alpha = 0.3 + 0.6 * np.clip(grad_norm / (grad_norm.std() + 1e-10), 0, 1)
+            # Extract shipborne points in this tile
+            tile_lat0 = lat_ssv[i0]
+            tile_lat1 = lat_ssv[i1 - 1]
+            tile_lon0 = lon_ssv[j0]
+            tile_lon1 = lon_ssv[j1 - 1]
 
-            gravity_kf[i0:i1, j0:j1] = alpha * grav_tile + (1 - alpha) * grav_smoothed
+            n_ship = 0
+            ship_tile = None
+            if ship_pts is not None:
+                mask = ((ship_pts[:, 0] >= tile_lon0) & (ship_pts[:, 0] <= tile_lon1) &
+                        (ship_pts[:, 1] >= min(tile_lat0, tile_lat1)) &
+                        (ship_pts[:, 1] <= max(tile_lat0, tile_lat1)))
+                n_ship = mask.sum()
+                if n_ship > 100:
+                    pts_tile = ship_pts[mask]
+                    lon_hr = np.linspace(tile_lon0, tile_lon1, tile_nx)
+                    lat_hr = np.linspace(tile_lat0, tile_lat1, tile_ny)
+                    lon_m, lat_m = np.meshgrid(lon_hr, lat_hr)
+                    ship_tile = griddata(pts_tile[:, :2], pts_tile[:, 2],
+                                         (lon_m, lat_m), method="nearest")
 
-            if done % 100 == 0:
+            # Tile with shipborne data: full KF. Without: adaptive smoothing.
+            if ship_tile is not None:
+                lr_ny = max(4, tile_ny // 2)
+                lr_nx = max(4, tile_nx // 2)
+                grav_lr = zoom(grav_tile, (lr_ny/tile_ny, lr_nx/tile_nx), order=1)
+                reconstructor = KalmanGravityReconstructor(
+                    grid_shape=(tile_ny, tile_nx), region_size_deg=tile_size_lat,
+                    lr_grid_shape=(lr_ny, lr_nx))
+                reconstructor.initialize(
+                    gravity_lr=grav_lr, gravity_ship=ship_tile,
+                    process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
+                gravity_kf[i0:i1, j0:j1] = reconstructor.run(
+                    n_iterations=3, smooth_sigma=0.6, verbose=False)
+            else:
+                grav_smoothed = gaussian_filter(grav_tile, sigma=0.8)
+                gy, gx = np.gradient(grav_tile)
+                grad_norm = np.sqrt(gy**2 + gx**2)
+                alpha = 0.3 + 0.6 * np.clip(grad_norm/(grad_norm.std()+1e-10), 0, 1)
+                gravity_kf[i0:i1, j0:j1] = alpha*grav_tile + (1-alpha)*grav_smoothed
+
+            if done % 20 == 0:
                 elapsed = time.time() - t0
                 eta = elapsed / done * (n_total - done)
-                print(f"  {done}/{n_total} tiles ({elapsed:.0f}s elapsed, ETA {eta:.0f}s)")
+                tag = "KF" if ship_tile is not None else "smooth"
+                print(f"  {done}/{n_total} [{tag}] ship pts: {n_ship}, "
+                      f"{elapsed:.0f}s elapsed, ETA {eta/60:.0f}min")
 
     elapsed = time.time() - t0
-    print(f"  Completed {done} tiles in {elapsed:.0f}s")
+    print(f"  Completed {done} tiles in {elapsed/60:.1f} min")
 
-    print("\n[3/3] Computing VGG and saving...")
-    vgg_kf = compute_vgg(gravity_kf, 1.0 / 60, lat_center=30.0)
+    print("\n[4/4] Computing VGG and saving...")
+    vgg_kf = compute_vgg(gravity_kf, 1.0 / 60, lat=lat_ssv)
 
     import tempfile as tmpmod
     tmp_out = tmpmod.NamedTemporaryFile(suffix=".nc", delete=False)
@@ -165,6 +216,38 @@ def create_global_gravity_model(tile_size_lat=20):
     print(f"  Resolution: 1 arc-minute ({nx} x {ny})")
     print(f"  Gravity: mean={gravity_kf.mean():.2f}, std={gravity_kf.std():.2f} mGal")
     print(f"  Size: {os.path.getsize(str(output_nc))/1024**2:.0f} MB")
+
+    # --- ICGEM validation ---
+    print(f"\n[Validation] ICGEM independent model comparison...")
+    icgem_dir = DATA_DIR / "icgem" / "grid"
+    ref_models = {
+        "XGM2019e": icgem_dir / "XGM2019e_gravity_anomaly.nc",
+        "EGM2008": icgem_dir / "EGM2008_gravity_anomaly.nc",
+    }
+    for name, fpath in ref_models.items():
+        if fpath.exists():
+            ds_ref = xr.open_dataset(str(fpath), engine=NC_ENGINE)
+            vname = [v for v in ds_ref.variables if len(ds_ref[v].dims) >= 2][0]
+            grav_ref = ds_ref[vname].values
+            lon_ref = ds_ref.lon.values if "lon" in ds_ref else ds_ref.longitude.values
+            lat_ref = ds_ref.lat.values if "lat" in ds_ref else ds_ref.latitude.values
+            ds_ref.close()
+
+            # Interpolate KF to ref grid for comparison
+            from scipy.interpolate import RegularGridInterpolator
+            interp = RegularGridInterpolator(
+                (lat_ssv, lon_ssv), gravity_kf.astype(np.float64),
+                bounds_error=False, fill_value=np.nan)
+            lon_ref_2d, lat_ref_2d = np.meshgrid(lon_ref, lat_ref)
+            pts = np.column_stack([lat_ref_2d.ravel(), lon_ref_2d.ravel()])
+            kf_interp = interp(pts).reshape(lat_ref_2d.shape)
+
+            valid = ~np.isnan(kf_interp) & ~np.isnan(grav_ref)
+            diff = kf_interp[valid] - grav_ref[valid]
+            rmse = np.sqrt(np.mean(diff**2))
+            print(f"  KF vs {name}: RMSE={rmse:.1f} mGal, "
+                  f"mean_diff={diff.mean():.2f}, std_diff={diff.std():.2f}")
+
     return str(output_nc), gravity_kf, lon_ssv, lat_ssv
 
 
@@ -185,7 +268,7 @@ def super_resolve_regions_with_shipborne(gravity_1min, lon_1min, lat_1min, upsca
             fname = f.name.lower()
             is_grav = any(kw in fname for kw in [
                 "faa", "free_air", "free-air", "_gravity", "residual",
-                "maba", "rmba", "bouguer"])
+                "maba", "rmba", "bouguer", "ba."])
             if not is_grav:
                 continue
 
@@ -254,6 +337,25 @@ def super_resolve_regions_with_shipborne(gravity_1min, lon_1min, lat_1min, upsca
                 print(f"  Skip {f.name}: {e}")
 
     print(f"\n  Super-resolved {len(results)} regions")
+
+    for fpath_str, r in results.items():
+        fpath = Path(fpath_str)
+        safe_name = re.sub(r'[\\/*?:"<>|]', '_', f"{fpath.parent.name}_{fpath.stem}")
+        sr_file = SR_DIR / f"{safe_name}_sr.nc"
+        ds = nc.Dataset(str(sr_file), "w", format="NETCDF4")
+        ds.createDimension("lon", len(r["lon_hr"]))
+        ds.createDimension("lat", len(r["lat_hr"]))
+        v_lon = ds.createVariable("lon", "f8", ("lon",))
+        v_lat = ds.createVariable("lat", "f8", ("lat",))
+        v_grav = ds.createVariable("gravity_sr", "f4", ("lat", "lon"), zlib=True)
+        v_grav.long_name = "Super-resolved free-air gravity anomaly"
+        v_grav.units = "mGal"
+        v_lon[:] = r["lon_hr"]
+        v_lat[:] = r["lat_hr"]
+        v_grav[:] = r["gravity_sr"].astype(np.float32)
+        ds.close()
+        print(f"  Saved: {sr_file}")
+
     return results
 
 

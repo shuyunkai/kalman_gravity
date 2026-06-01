@@ -33,22 +33,29 @@ def load_ssv_region(lon_range, lat_range):
     ds_c = xr.open_dataset(str(curv_path), engine=NC_ENGINE)
 
     lat_slice = slice(lat_range[0], lat_range[1])
-    lon0 = (lon_range[0] + 360) % 360
-    lon1 = (lon_range[1] + 360) % 360
+    ds_lon = ds_g.lon.values
+
+    # Determine if dataset uses 0-360 or -180-180
+    if ds_lon.max() > 180:
+        lon0 = (lon_range[0] + 360) % 360
+        lon1 = (lon_range[1] + 360) % 360
+    else:
+        lon0, lon1 = lon_range[0], lon_range[1]
 
     if lon0 < lon1:
         gravity = ds_g.z.sel(lon=slice(lon0, lon1), lat=lat_slice).values
         vgg = ds_c.z.sel(lon=slice(lon0, lon1), lat=lat_slice).values
         lon = ds_g.lon.sel(lon=slice(lon0, lon1)).values
     else:
-        g1 = ds_g.z.sel(lon=slice(lon0, 360), lat=lat_slice).values
-        g2 = ds_g.z.sel(lon=slice(0, lon1), lat=lat_slice).values
+        lmax = 360 if ds_lon.max() > 180 else 180
+        g1 = ds_g.z.sel(lon=slice(lon0, lmax), lat=lat_slice).values
+        g2 = ds_g.z.sel(lon=slice(-lmax, lon1), lat=lat_slice).values
         gravity = np.concatenate([g1, g2], axis=1)
-        v1 = ds_c.z.sel(lon=slice(lon0, 360), lat=lat_slice).values
-        v2 = ds_c.z.sel(lon=slice(0, lon1), lat=lat_slice).values
+        v1 = ds_c.z.sel(lon=slice(lon0, lmax), lat=lat_slice).values
+        v2 = ds_c.z.sel(lon=slice(-lmax, lon1), lat=lat_slice).values
         vgg = np.concatenate([v1, v2], axis=1)
-        l1 = ds_g.lon.sel(lon=slice(lon0, 360)).values
-        l2 = ds_g.lon.sel(lon=slice(0, lon1)).values
+        l1 = ds_g.lon.sel(lon=slice(lon0, lmax)).values
+        l2 = ds_g.lon.sel(lon=slice(-lmax, lon1)).values
         lon = np.concatenate([l1, l2])
 
     lat = ds_g.lat.sel(lat=lat_slice).values
@@ -96,9 +103,11 @@ def _read_gmt_grd(filepath):
             lon = ds.variables["lon"][:].copy() if "lon" in ds.variables else None
             lat = ds.variables["lat"][:].copy() if "lat" in ds.variables else None
             if lon is None:
-                lon = ds.variables["longitude"][:].copy()
+                lon = ds.variables.get("longitude", ds.variables.get("x"))
+                lon = lon[:].copy() if lon is not None else None
             if lat is None:
-                lat = ds.variables["latitude"][:].copy()
+                lat = ds.variables.get("latitude", ds.variables.get("y"))
+                lat = lat[:].copy() if lat is not None else None
             ds.close()
             for _ in range(5):
                 try:
@@ -142,7 +151,8 @@ def load_shipborne_gravity(lon_grid, lat_grid):
         for f in list(cruise_dir.glob("*.grd.gz")) + list(cruise_dir.glob("*.grd")):
             fname = f.name.lower()
             is_gravity = any(kw in fname for kw in [
-                "faa", "free_air", "free-air", "_gravity", "residual", "maba", "rmba", "bouguer"])
+                "faa", "free_air", "free-air", "_gravity", "residual", "maba", "rmba", "bouguer",
+                "ba."])
             is_bathy = any(kw in fname for kw in ["_mb", "bathy", "0.00025"])
 
             if not (is_gravity or is_bathy):
@@ -160,15 +170,22 @@ def load_shipborne_gravity(lon_grid, lat_grid):
                     continue
 
                 valid = mask & ~np.isnan(data)
-                idx = np.where(valid)
+                n_valid = valid.sum()
+                # Subsample if too many points (e.g., high-res bathymetry)
+                if n_valid > 500000:
+                    step = max(1, n_valid // 500000)
+                    idx_flat = np.where(valid.ravel())[0][::step]
+                    idx = np.unravel_index(idx_flat, valid.shape)
+                else:
+                    idx = np.where(valid)
                 for i, j in zip(idx[0], idx[1]):
                     pt = (lon[j], lat[i], data[i, j])
                     if is_gravity and abs(data[i, j]) < 5000:
                         gravity_points.append(pt)
-                    elif is_bathy:
+                    elif is_bathy and -12000 < data[i, j] < 5000:
                         bathy_points.append(pt)
 
-                print(f"  Loaded {f.name}: {valid.sum()} points")
+                print(f"  Loaded {f.name}: {len(idx[0])} points (from {n_valid:,})")
             except Exception:
                 pass
 
@@ -201,12 +218,8 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     bathy_gebco, lon_b, lat_b = load_gebco_region(lon_range, lat_range)
     print(f"  GEBCO: {bathy_gebco.shape}")
 
-    from scipy.ndimage import zoom as sp_zoom
-    zoom_fac = (gravity_lr.shape[0] / bathy_gebco.shape[0],
-                gravity_lr.shape[1] / bathy_gebco.shape[1])
-    bathy_prior_lr = sp_zoom(bathy_gebco, zoom_fac, order=1)
-
     print("\n[3/3] Loading shipborne data...")
+    from scipy.ndimage import zoom as sp_zoom
     ny_lr, nx_lr = gravity_lr.shape
     ny_hr, nx_hr = ny_lr * upscale, nx_lr * upscale
     lon_hr = np.linspace(lon_range[0], lon_range[1], nx_hr)
@@ -255,6 +268,15 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     m_b_trad = compute_metrics(bathymetry_trad, bathy_truth_hr)
     m_g_ship = compute_metrics(gravity_hr, ship_grav) if n_ship > 0 else None
 
+    # 独立验证: 仅用船载水深（未参与反演）
+    n_bathy_ship = np.sum(~np.isnan(ship_bathy)) if ship_bathy is not None else 0
+    m_b_kf_ship = None
+    m_b_trad_ship = None
+    if n_bathy_ship > 100:
+        mask_b = ~np.isnan(ship_bathy)
+        m_b_kf_ship = compute_metrics(bathymetry_kf[mask_b], ship_bathy[mask_b])
+        m_b_trad_ship = compute_metrics(bathymetry_trad[mask_b], ship_bathy[mask_b])
+
     print("\n" + "=" * 60)
     print("  RESULTS")
     print("=" * 60)
@@ -263,6 +285,8 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
         print(f"  Gravity KF vs Ship RMSE: {m_g_ship['RMSE']:.1f} mGal")
     print(f"  Bathymetry KF mean: {bathymetry_kf.mean():.0f} m")
     print(f"  Bathymetry RMSE vs GEBCO: {m_b_kf['RMSE']:.0f} m (KF) vs {m_b_trad['RMSE']:.0f} m (Parker)")
+    if m_b_kf_ship:
+        print(f"  Bathymetry RMSE vs 船载(独立): {m_b_kf_ship['RMSE']:.0f} m (KF) vs {m_b_trad_ship['RMSE']:.0f} m (Parker)")
 
     plot_gravity_field(
         [gravity_lr, gravity_hr, gravity_bilinear],

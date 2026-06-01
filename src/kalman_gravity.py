@@ -51,6 +51,7 @@ class KalmanGravityReconstructor:
         self.gravity_lr = gravity_lr
         self.gravity_ship = gravity_ship
         self._initialized = True
+        self._iter_count = 0
 
         print(f"卡尔曼滤波器初始化完成. 状态维度: {self.n_state}")
         print(f"  过程噪声 std: {process_noise_std:.2f} mGal")
@@ -66,7 +67,8 @@ class KalmanGravityReconstructor:
         x_pred_2d = gaussian_filter(x_2d, sigma=smooth_sigma)
         self.x = x_pred_2d.ravel()
 
-        self.P_diag = self.P_diag * (1.0 + smooth_sigma * 0.1) + self.Q_diag
+        factor = 1.0 + smooth_sigma * 0.1
+        self.P_diag = self.P_diag * factor + self.Q_diag
         self.P_diag = np.minimum(self.P_diag, 100.0 * np.median(self.P_diag[self.P_diag > 0] + 1e-10))
 
     def update_satellite(self):
@@ -96,8 +98,7 @@ class KalmanGravityReconstructor:
 
                 z_pred = block_flat.mean()
                 P_block = self.P_diag.reshape(self.ny, self.nx)[i0:i1, j0:j1].mean()
-                R_eff = self.R_sat_val / max(1, np.sqrt(n_block))
-                K = P_block / (P_block + R_eff)
+                K = P_block / (P_block + self.R_sat_val)
                 innovation = z - z_pred
                 block_flat_updated = block_flat + K * innovation
                 x_2d[i0:i1, j0:j1] = block_flat_updated.reshape(block.shape)
@@ -125,11 +126,13 @@ class KalmanGravityReconstructor:
 
         n_obs = min(len(valid_indices), max_points_per_update)
         if len(valid_indices) > max_points_per_update:
-            rng = np.random.default_rng(42)
+            seed = 42 + self._iter_count
+            rng = np.random.default_rng(seed)
             chosen = rng.choice(len(valid_indices), n_obs, replace=False)
             obs_indices = valid_indices[chosen]
         else:
             obs_indices = valid_indices
+        self._iter_count += 1
 
         x_2d = self.x.reshape(self.ny, self.nx)
         P_2d = self.P_diag.reshape(self.ny, self.nx)
@@ -173,11 +176,8 @@ class KalmanGravityReconstructor:
         self.x = x_2d.ravel()
         self.P_diag = P_2d.ravel()
 
-    def smooth_backward(self, x_history, P_diag_history, smooth_sigma=0.8):
-        """RTS 反向平滑：利用前向滤波历史状态和协方差，获得更优估计。
-
-        前向滤波的预测因子 factor = 1 + smooth_sigma*0.1 必须与此一致。
-        """
+    def smooth_backward(self, x_history, x_pred_history, P_diag_history, smooth_sigma=0.8):
+        """RTS 反向平滑：利用前向滤波历史状态和协方差，获得更优估计。"""
         factor = 1.0 + smooth_sigma * 0.1
         n_steps = len(x_history)
         x_smooth = x_history[-1].copy()
@@ -186,7 +186,7 @@ class KalmanGravityReconstructor:
         for k in range(n_steps - 2, -1, -1):
             P_pred = P_diag_history[k] * factor + self.Q_diag
             C_k = P_diag_history[k] / np.maximum(P_pred, 1e-10)
-            x_smooth = x_history[k] + C_k * (x_smooth - x_history[k])
+            x_smooth = x_history[k] + C_k * (x_smooth - x_pred_history[k + 1])
             P_smooth = P_diag_history[k] + C_k ** 2 * (P_smooth - P_pred)
             P_smooth = np.maximum(P_smooth, 0)
 
@@ -197,11 +197,14 @@ class KalmanGravityReconstructor:
         if not self._initialized:
             raise RuntimeError("请先调用 initialize() 初始化滤波器")
 
+        self._iter_count = 0
         x_history = []
+        x_pred_history = []
         p_history = []
 
         for it in range(n_iterations):
             self.predict(smooth_sigma=smooth_sigma)
+            x_pred_history.append(self.x.copy())
             self.update_satellite()
             if self.gravity_ship is not None:
                 self.update_shipborne()
@@ -214,7 +217,7 @@ class KalmanGravityReconstructor:
                 print(f"  迭代 {it+1}/{n_iterations}: mean={x_2d.mean():.2f}, std={x_2d.std():.2f}, "
                       f"range=[{x_2d.min():.1f}, {x_2d.max():.1f}]")
 
-        x_final = self.smooth_backward(x_history, p_history, smooth_sigma=smooth_sigma)
+        x_final = self.smooth_backward(x_history, x_pred_history, p_history, smooth_sigma=smooth_sigma)
         return x_final.reshape(self.ny, self.nx)
 
 
@@ -306,9 +309,11 @@ class EnsembleKalmanGravityReconstructor:
         valid_indices = np.where(valid_mask.ravel())[0]
         n_obs = min(len(valid_indices), 500)
         if len(valid_indices) > 500:
-            rng = np.random.default_rng(42)
+            seed = 42 + getattr(self, '_enkf_iter_count', 0)
+            rng = np.random.default_rng(seed)
             chosen = rng.choice(len(valid_indices), n_obs, replace=False)
             valid_indices = valid_indices[chosen]
+        self._enkf_iter_count = getattr(self, '_enkf_iter_count', 0) + 1
 
         for idx in valid_indices:
             z = valid_flat[idx]
@@ -337,6 +342,8 @@ class EnsembleKalmanGravityReconstructor:
         """运行 EnKF 迭代，返回集合均值作为高分辨率重力场。"""
         if not self._initialized:
             raise RuntimeError("请先调用 initialize() 初始化 EnKF")
+
+        self._enkf_iter_count = 0
 
         for it in range(n_iterations):
             self.predict(smooth_sigma=smooth_sigma)
@@ -510,9 +517,13 @@ class KalmanBathymetryInverter:
             mask_prior = ~np.isnan(bathymetry_prior)
             if bathy_ship is not None:
                 mask_s = ~np.isnan(bathy_ship)
-                x0[~mask_s & mask_prior] = bathymetry_prior[~mask_s & mask_prior]
+                # Blend GEBCO as weak prior (30%), not full replacement
+                blend_region = ~mask_s & mask_prior
+                x0[blend_region] = 0.7 * x0[blend_region] + 0.3 * bathymetry_prior[blend_region]
             else:
-                x0[~np.isnan(bathymetry_prior)] = bathymetry_prior[~np.isnan(bathymetry_prior)]
+                # Without shipborne, use GEBCO at 50% weight to avoid over-reliance
+                blend_region = mask_prior
+                x0[blend_region] = 0.5 * x0[blend_region] + 0.5 * bathymetry_prior[blend_region]
 
         self.x = x0.ravel()
         self.P_diag = np.full(self.n_state, process_noise_std ** 2)
@@ -528,7 +539,8 @@ class KalmanBathymetryInverter:
         x_2d = self.x.reshape(self.ny, self.nx)
         x_pred = gaussian_filter(x_2d, sigma=smooth_sigma)
         self.x = x_pred.ravel()
-        self.P_diag = self.P_diag * 1.05 + self.process_noise_std ** 2
+        factor = 1.0 + smooth_sigma * 0.05
+        self.P_diag = self.P_diag * factor + self.process_noise_std ** 2
         self.P_diag = np.minimum(self.P_diag, 100.0 * np.median(self.P_diag[self.P_diag > 0] + 1e-10))
 
     def update_gravity(self, max_iter=50, lr=0.3):
@@ -564,14 +576,14 @@ class KalmanBathymetryInverter:
 
         return self.x.reshape(self.ny, self.nx)
 
-    def run(self, n_iterations=5, smooth_sigma=1.0, verbose=True):
+    def run(self, n_iterations=5, smooth_sigma=1.0, inner_iter=20, verbose=True):
         """运行水深反演：预测-更新迭代。"""
         if not self._initialized:
             raise RuntimeError("请先调用 initialize() 初始化反演器")
 
         for it in range(n_iterations):
             self.predict(smooth_sigma=smooth_sigma)
-            bathymetry = self.update_gravity(max_iter=20, lr=0.3)
+            bathymetry = self.update_gravity(max_iter=inner_iter, lr=0.3)
 
             if verbose:
                 print(f"  迭代 {it+1}/{n_iterations}: depth_mean={bathymetry.mean():.1f} m, "

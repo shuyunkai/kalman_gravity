@@ -22,7 +22,10 @@ OUTPUT_DIR = Path(__file__).parent.parent / "output_figures"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 NC_ENGINE = "h5netcdf"
 
-fm._load_fontmanager(try_read_cache=False)
+try:
+    fm._load_fontmanager(try_read_cache=False)
+except AttributeError:
+    pass
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Noto Sans SC", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 plt.rcParams["font.size"] = 10
@@ -93,7 +96,10 @@ def fig2_shipborne_distribution():
     ax.set_ylabel("纬度")
 
     ship_dir = DATA_DIR / "shipborne"
-    colors = plt.cm.tab20(np.linspace(0, 1, 20))
+    colors = np.vstack([
+        plt.cm.tab20(np.linspace(0, 1, 20)),
+        plt.cm.tab20b(np.linspace(0, 1, 20)),
+    ])
     c_idx = 0
     from matplotlib.patches import Rectangle
 
@@ -328,8 +334,12 @@ def fig5_power_spectrum():
 
     ds_ssv = xr.open_dataset(str(grav_path), engine=NC_ENGINE)
     ds_kf = xr.open_dataset(str(kf_path), engine=NC_ENGINE)
-    grav_ssv = ds_ssv.z.values[:512, :512]
-    grav_kf = ds_kf.gravity_anomaly.values[:512, :512]
+    ny, nx = ds_ssv.z.shape
+    sample_size = 2048
+    i0 = max(0, (ny - sample_size) // 2)
+    j0 = max(0, (nx - sample_size) // 2)
+    grav_ssv = ds_ssv.z.values[i0:i0+sample_size, j0:j0+sample_size]
+    grav_kf = ds_kf.gravity_anomaly.values[i0:i0+sample_size, j0:j0+sample_size]
     ds_ssv.close()
     ds_kf.close()
 

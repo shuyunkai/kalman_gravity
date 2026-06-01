@@ -102,25 +102,6 @@ def load_gebco(filepath=None, region=None):
     return {"bathymetry": bathymetry, "lon": lon, "lat": lat, "resolution": "15 arc-sec"}
 
 
-def load_egm2008_gravity(lon_grid, lat_grid, nmax=2190):
-    """从 ICGEM 服务或本地球谐系数计算 EGM2008 重力异常。"""
-    try:
-        from geoclaw.gravity import compute_gravity_anomaly
-    except ImportError:
-        print("geoclaw 未安装，请使用 ICGEM 在线服务: http://icgem.gfz-potsdam.de/calcgrid")
-        return _compute_egm2008_simple(lon_grid, lat_grid, nmax)
-    gravity = compute_gravity_anomaly(lon_grid, lat_grid, nmax=nmax)
-    return gravity
-
-
-def _compute_egm2008_simple(lon_grid, lat_grid, nmax=2190):
-    """EGM2008 需要球谐系数文件，当前不可用时抛出异常。"""
-    raise NotImplementedError(
-        "EGM2008 系数文件未安装。请从 http://icgem.gfz-potsdam.de/ 下载。"
-        "SSV33.1 可提供等效的海洋重力数据。"
-    )
-
-
 def prepare_real_data_pipeline(region, ssv_file=None, gebco_file=None):
     """为卡尔曼滤波管线准备指定区域的真实数据。"""
     lon_min, lon_max, lat_min, lat_max = region

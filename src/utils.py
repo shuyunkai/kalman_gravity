@@ -9,7 +9,10 @@ import warnings
 
 warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*overflow.*")
 
-fm._load_fontmanager(try_read_cache=False)
+try:
+    fm._load_fontmanager(try_read_cache=False)
+except AttributeError:
+    pass
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Noto Sans SC", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
@@ -75,15 +78,31 @@ def print_metrics(metrics, title="Metrics"):
     print(f"{'='*50}")
 
 
-def compute_vgg(gravity, dx_deg, lat_center=0):
-    """频域垂直重力梯度: VGG = dg/dz = F^{-1}[|k|*F[g]]。含纬度校正。"""
+def compute_vgg(gravity, dx_deg, lat_center=0, lat=None):
+    """频域垂直重力梯度: VGG = dg/dz = F^{-1}[|k|*F[g]]。含纬度校正。
+
+    可传入 lat 数组按行做纬度校正，或使用 lat_center 做全局近似。
+    """
     ny, nx = gravity.shape
-    cos_lat = np.cos(np.radians(lat_center))
-    dx_m = dx_deg * 111320 * cos_lat
     dy_m = dx_deg * 111320
+
+    if lat is not None and len(lat) == ny:
+        cos_lat = np.cos(np.radians(np.asarray(lat)))
+        cos_lat_2d = cos_lat[:, None]
+        dx_m = dx_deg * 111320 * cos_lat_2d
+    else:
+        cos_lat = np.cos(np.radians(lat_center))
+        dx_m = dx_deg * 111320 * cos_lat
+
     kx = 2 * np.pi * np.fft.fftfreq(nx, dx_m)
     ky = 2 * np.pi * np.fft.fftfreq(ny, dy_m)
-    kx_grid, ky_grid = np.meshgrid(kx, ky)
+
+    if lat is not None and len(lat) == ny:
+        kx_grid, ky_grid = np.meshgrid(kx[0, :], ky)
+        kx_grid = kx_grid * cos_lat_2d
+    else:
+        kx_grid, ky_grid = np.meshgrid(kx, ky)
+
     k = np.sqrt(kx_grid ** 2 + ky_grid ** 2)
     k[0, 0] = 1e-10
 
