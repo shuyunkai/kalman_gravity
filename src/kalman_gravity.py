@@ -233,6 +233,7 @@ class KalmanGravityReconstructor:
                       f"range=[{x_2d.min():.1f}, {x_2d.max():.1f}]")
 
         x_final = self.smooth_backward(x_history, x_pred_history, p_history, smooth_sigma=smooth_sigma)
+        self._P_final = p_history[-1].reshape(self.ny, self.nx)
         return x_final.reshape(self.ny, self.nx)
 
 

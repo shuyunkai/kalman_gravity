@@ -519,12 +519,411 @@ def fig7_summary_table():
     print(f"  Saved: fig7_summary_table.png")
 
 
+def fig8_residual_diagnostics():
+    """图8: 残差空间诊断 — 水深/距离/自相关/剖面 2x2。"""
+    print("[Fig 8] Residual Diagnostics...")
+    (grav_lr, grav_kf, grav_bi, ship_hr, ship_lon, ship_lat, lon_hr, lat_hr,
+     lon_range, lat_range, ship_val_mask) = _load_japan_data(upscale=4)
+
+    ny_hr, nx_hr = grav_kf.shape
+    mask = ship_val_mask & ~np.isnan(ship_hr)
+    if mask.sum() < 100:
+        print("  Skipped: insufficient validation points")
+        return
+
+    residual_kf = grav_kf - ship_hr
+    residual_bi = grav_bi - ship_hr
+    lon_2d, lat_2d = np.meshgrid(lon_hr, lat_hr)
+
+    # Panel 3: spatial autocorrelation of KF residuals
+    from scipy.ndimage import zoom as sp_zoom
+    mask_sub = mask[::4, ::4]
+    resid_sub = residual_kf[::4, ::4]
+    resid_sub[~mask_sub] = np.nan
+
+    # Compute 1D correlation along rows and columns where data exists
+    row_ac = []
+    for i in range(0, resid_sub.shape[0], 4):
+        row = resid_sub[i, :]
+        valid = ~np.isnan(row)
+        if valid.sum() > 10:
+            ac = np.correlate(row[valid] - np.nanmean(row[valid]),
+                              row[valid] - np.nanmean(row[valid]), mode='same')
+            row_ac.append(ac / ac.max())
+
+    fig, axes = plt.subplots(2, 2, figsize=(13, 10))
+
+    # Panel 1: Residual vs bathymetry
+    ax = axes[0, 0]
+    try:
+        from real_data import load_gebco
+        gebco = load_gebco(region=(lon_range[0], lon_range[1],
+                                   lat_range[0], lat_range[1]))
+        bathy_lr = gebco["bathymetry"]
+        bathy_hr = sp_zoom(bathy_lr, (ny_hr / bathy_lr.shape[0],
+                                      nx_hr / bathy_lr.shape[1]), order=1)
+        ax.scatter(bathy_hr[mask].ravel(), residual_kf[mask].ravel(),
+                   alpha=0.15, s=1, c='steelblue')
+        ax.axhline(0, color='k', ls='--', lw=1)
+        ax.set_xlabel("GEBCO 水深 (m)")
+        ax.set_ylabel("KF 重力残差 (mGal)")
+        ax.set_title("残差 vs 水深")
+    except Exception:
+        ax.text(0.5, 0.5, "GEBCO 不可用", transform=ax.transAxes, ha='center')
+
+    # Panel 2: Residual vs distance to nearest ship point
+    ax = axes[0, 1]
+    ship_pts = np.column_stack([
+        lon_2d[mask], lat_2d[mask], ship_hr[mask]])
+    # Subsample ship points for distance computation
+    n_pts = min(2000, len(ship_pts))
+    idx_pts = np.random.default_rng(42).choice(len(ship_pts), n_pts, replace=False)
+    ship_sample = ship_pts[idx_pts, :2]
+
+    # Compute distance from each validation point to nearest ship point
+    dists = np.full(mask.sum(), np.nan)
+    for k, (ii, jj) in enumerate(zip(*np.where(mask))):
+        dlon = (lon_2d[ii, jj] - ship_sample[:, 0]) * 111.32 * np.cos(np.radians(lat_2d[ii, jj]))
+        dlat = (lat_2d[ii, jj] - ship_sample[:, 1]) * 111.32
+        dists[k] = np.sqrt(dlon**2 + dlat**2).min()
+
+    ax.scatter(dists, residual_kf[mask].ravel()[:len(dists)],
+               alpha=0.15, s=1, c='steelblue')
+    ax.axhline(0, color='k', ls='--', lw=1)
+    ax.set_xlabel("距最近船载测点 (km)")
+    ax.set_ylabel("KF 重力残差 (mGal)")
+    ax.set_title("残差 vs 距船载距离")
+
+    # Panel 3: Residual histogram by latitude band
+    ax = axes[1, 0]
+    lat_vals = lat_2d[mask]
+    lat_bins = np.linspace(lat_range[0], lat_range[1], 8)
+    band_rms = []
+    band_centers = []
+    for b in range(len(lat_bins) - 1):
+        m = (lat_vals >= lat_bins[b]) & (lat_vals < lat_bins[b + 1])
+        if m.sum() > 20:
+            band_rms.append(np.sqrt(np.mean(residual_kf[mask][m.ravel()[:residual_kf[mask].size]] ** 2)))
+            band_centers.append((lat_bins[b] + lat_bins[b + 1]) / 2)
+    if band_rms:
+        ax.bar(band_centers, band_rms, width=lat_bins[1] - lat_bins[0],
+               color='steelblue', edgecolor='white')
+        ax.set_xlabel("纬度")
+        ax.set_ylabel("KF 残差 RMSE (mGal)")
+        ax.set_title("残差随纬度变化")
+    else:
+        ax.text(0.5, 0.5, "数据不足", transform=ax.transAxes, ha='center')
+
+    # Panel 4: Error vs bilinear improvement
+    ax = axes[1, 1]
+    improvement = np.abs(residual_kf[mask].ravel()) - np.abs(residual_bi[mask].ravel())
+    ax.hist(improvement, bins=60, color='steelblue', edgecolor='white', alpha=0.8)
+    ax.axvline(0, color='k', ls='--', lw=1.5)
+    ax.set_xlabel("|KF残差| - |双线性残差| (mGal)")
+    ax.set_ylabel("频数")
+    ax.set_title(f"KF 改进分布 (负值=KF更优, "
+                 f"均值={improvement.mean():.1f} mGal)")
+
+    fig.suptitle("残差空间诊断", fontsize=14, fontweight="bold")
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "fig8_residual_diagnostics.png", dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Saved: fig8_residual_diagnostics.png")
+
+
+def fig9_parameter_sensitivity():
+    """图9: 参数敏感性 — Q/R 网格搜索 RMSE 热力图。"""
+    print("[Fig 9] Parameter Sensitivity (Q/R grid search)...")
+
+    process_values = [0.5, 1.0, 2.0, 4.0, 8.0]
+    sat_values = [1.0, 2.0, 3.0, 5.0, 8.0]
+
+    # Load data once
+    lon_range, lat_range = (138, 152), (32, 48)
+    grav_path = DATA_DIR / "ssv32" / "grav_33.1.nc"
+    ds = xr.open_dataset(str(grav_path), engine=NC_ENGINE)
+    grav_lr = ds.z.sel(lon=slice(*lon_range), lat=slice(*lat_range)).values
+    ds.close()
+    ny_lr, nx_lr = grav_lr.shape
+    upscale = 4
+    ny_hr, nx_hr = ny_lr * upscale, nx_lr * upscale
+    lon_hr = np.linspace(*lon_range, nx_hr)
+    lat_hr = np.linspace(*lat_range, ny_hr)
+
+    from kalman_gravity import KalmanGravityReconstructor
+    from scipy.interpolate import griddata as scipy_griddata
+
+    jap_path = DATA_DIR / "shipborne" / "Subduction_Bassett" / "Japan_Residual_gravity.grd.gz"
+    if not jap_path.exists():
+        print(f"  Skipped: {jap_path} not found")
+        return
+    import netCDF4 as nc4
+    tmp = tempfile.NamedTemporaryFile(suffix=".grd", delete=False)
+    tmp.write(gzip.open(str(jap_path), "rb").read())
+    tmp.close()
+    ds_j = nc4.Dataset(tmp.name, "r")
+    ship_g = ds_j.variables["z"][:].copy()
+    ship_lon = ds_j.variables["lon"][:].copy()
+    ship_lat = ds_j.variables["lat"][:].copy()
+    ds_j.close()
+    os.unlink(tmp.name)
+
+    lon2d, lat2d = np.meshgrid(ship_lon, ship_lat)
+    valid_s = ~np.isnan(ship_g) & (np.abs(ship_g) < 5000)
+    pts = np.column_stack([lon2d[valid_s], lat2d[valid_s], ship_g[valid_s]])
+    lon_hr2d, lat_hr2d = np.meshgrid(lon_hr, lat_hr)
+    ship_hr = scipy_griddata(pts[:, :2], pts[:, 2], (lon_hr2d, lat_hr2d), method="nearest")
+
+    from utils import split_shipborne_mask, compute_metrics
+    ship_train, ship_val = split_shipborne_mask(ship_hr, validation_fraction=0.3)
+    if ship_val.sum() < 100:
+        print("  Skipped: insufficient validation points")
+        return
+
+    rmse_grid = np.full((len(process_values), len(sat_values)), np.nan)
+    total = len(process_values) * len(sat_values)
+    done = 0
+
+    for pi, proc_std in enumerate(process_values):
+        for si, sat_std in enumerate(sat_values):
+            done += 1
+            recon = KalmanGravityReconstructor(
+                grid_shape=(ny_hr, nx_hr), region_size_deg=16,
+                lr_grid_shape=(ny_lr, nx_lr))
+            recon.initialize(gravity_lr=grav_lr, gravity_ship=ship_hr,
+                             ship_train_mask=ship_train,
+                             process_noise_std=proc_std,
+                             sat_noise_std=sat_std, ship_noise_std=1.0)
+            grav_hr = recon.run(n_iterations=4, smooth_sigma=0.8, verbose=False)
+            m = compute_metrics(grav_hr, ship_hr, mask=ship_val)
+            rmse_grid[pi, si] = m.get('RMSE', np.nan)
+            print(f"  [{done}/{total}] Q={proc_std}, R={sat_std} -> val RMSE={rmse_grid[pi,si]:.1f} mGal")
+
+    fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+    im = ax.imshow(rmse_grid, origin='lower', aspect='auto', cmap='RdYlBu_r')
+    ax.set_xticks(range(len(sat_values)))
+    ax.set_xticklabels([str(v) for v in sat_values])
+    ax.set_yticks(range(len(process_values)))
+    ax.set_yticklabels([str(v) for v in process_values])
+    ax.set_xlabel("卫星观测噪声 std (mGal)")
+    ax.set_ylabel("过程噪声 std (mGal)")
+    ax.set_title("KF 参数敏感性: 验证 RMSE (mGal)\n[日本海沟, ship_noise=1.0]")
+    for pi in range(len(process_values)):
+        for si in range(len(sat_values)):
+            ax.text(si, pi, f"{rmse_grid[pi,si]:.1f}",
+                    ha='center', va='center', fontsize=8,
+                    color='white' if rmse_grid[pi, si] > np.nanmedian(rmse_grid) else 'black')
+    plt.colorbar(im, ax=ax, label="RMSE (mGal)")
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "fig9_parameter_sensitivity.png", dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Best Q={process_values[np.unravel_index(np.nanargmin(rmse_grid), rmse_grid.shape)[0]]}, "
+          f"R={sat_values[np.unravel_index(np.nanargmin(rmse_grid), rmse_grid.shape)[1]]}")
+    print(f"  Saved: fig9_parameter_sensitivity.png")
+
+
+def fig10_uncertainty_coverage():
+    """图10: 不确定性验证 — KF 置信区间覆盖率 vs 理论正态。"""
+    print("[Fig 10] Uncertainty Coverage...")
+    lon_range, lat_range = (138, 152), (32, 48)
+    grav_path = DATA_DIR / "ssv32" / "grav_33.1.nc"
+    ds = xr.open_dataset(str(grav_path), engine=NC_ENGINE)
+    grav_lr = ds.z.sel(lon=slice(*lon_range), lat=slice(*lat_range)).values
+    ds.close()
+    ny_lr, nx_lr = grav_lr.shape
+    upscale = 4
+    ny_hr, nx_hr = ny_lr * upscale, nx_lr * upscale
+    lon_hr = np.linspace(*lon_range, nx_hr)
+    lat_hr = np.linspace(*lat_range, ny_hr)
+
+    import netCDF4 as nc4
+    from kalman_gravity import KalmanGravityReconstructor
+    from scipy.interpolate import griddata as scipy_griddata
+    from utils import split_shipborne_mask, compute_uncertainty_coverage
+
+    jap_path = DATA_DIR / "shipborne" / "Subduction_Bassett" / "Japan_Residual_gravity.grd.gz"
+    if not jap_path.exists():
+        print(f"  Skipped: {jap_path} not found")
+        return
+    tmp = tempfile.NamedTemporaryFile(suffix=".grd", delete=False)
+    tmp.write(gzip.open(str(jap_path), "rb").read())
+    tmp.close()
+    ds_j = nc4.Dataset(tmp.name, "r")
+    ship_g = ds_j.variables["z"][:].copy()
+    ship_lon = ds_j.variables["lon"][:].copy()
+    ship_lat = ds_j.variables["lat"][:].copy()
+    ds_j.close()
+    os.unlink(tmp.name)
+    lon2d, lat2d = np.meshgrid(ship_lon, ship_lat)
+    valid_s = ~np.isnan(ship_g) & (np.abs(ship_g) < 5000)
+    pts = np.column_stack([lon2d[valid_s], lat2d[valid_s], ship_g[valid_s]])
+    lon_hr2d, lat_hr2d = np.meshgrid(lon_hr, lat_hr)
+    ship_hr = scipy_griddata(pts[:, :2], pts[:, 2], (lon_hr2d, lat_hr2d), method="nearest")
+
+    ship_train, ship_val = split_shipborne_mask(ship_hr, validation_fraction=0.3)
+    if ship_val.sum() < 100:
+        print("  Skipped: insufficient validation points")
+        return
+
+    recon = KalmanGravityReconstructor(
+        grid_shape=(ny_hr, nx_hr), region_size_deg=16,
+        lr_grid_shape=(ny_lr, nx_lr))
+    recon.initialize(gravity_lr=grav_lr, gravity_ship=ship_hr,
+                     ship_train_mask=ship_train,
+                     process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
+    grav_hr = recon.run(n_iterations=6, smooth_sigma=0.8, verbose=False)
+    P_final = getattr(recon, '_P_final', np.full_like(grav_hr, 4.0))
+
+    uc = compute_uncertainty_coverage(
+        grav_hr, P_final, ship_hr, R_obs=1.0, grid_shape=(ny_hr, nx_hr))
+    if not uc:
+        print("  Skipped: not enough data")
+        return
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    # Panel 1: standardized residuals histogram
+    ax = axes[0]
+    std_res = uc['std_residuals']
+    std_res_clean = std_res[np.abs(std_res) < 5]  # trim extreme outliers
+    ax.hist(std_res_clean, bins=80, density=True, color='steelblue',
+            edgecolor='white', alpha=0.8, label='观测')
+    x = np.linspace(-4, 4, 200)
+    ax.plot(x, np.exp(-x**2 / 2) / np.sqrt(2 * np.pi), 'r-', lw=2, label='N(0,1)')
+    ax.axvline(0, color='k', ls='--', lw=1)
+    ax.set_xlabel("标准化残差 (pred - val) / sqrt(P + R)")
+    ax.set_ylabel("概率密度")
+    ax.set_title(f"标准化残差分布 (n={uc['n']:,})")
+    ax.legend()
+
+    # Panel 2: coverage bar chart
+    ax = axes[1]
+    levels = ['1σ (68.3%)', '2σ (95.4%)', '3σ (99.7%)']
+    expected = [0.683, 0.954, 0.997]
+    observed = [uc['coverage_1sigma'], uc['coverage_2sigma'], uc['coverage_3sigma']]
+    x_pos = np.arange(len(levels))
+    width = 0.35
+    ax.bar(x_pos - width/2, expected, width, label='理论', color='lightgray', edgecolor='black')
+    ax.bar(x_pos + width/2, observed, width, label='观测', color='steelblue', edgecolor='white')
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(levels)
+    ax.set_ylabel("覆盖率")
+    ax.set_title(f"置信区间覆盖率 (chi2={uc['chi2_reduced']:.2f})")
+    ax.legend()
+    for i in range(3):
+        ax.text(x_pos[i] + width/2, observed[i] + 0.01, f"{observed[i]:.1%}",
+                ha='center', fontsize=9)
+
+    fig.suptitle("卡尔曼滤波不确定性验证", fontsize=14, fontweight="bold")
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "fig10_uncertainty_coverage.png", dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Coverage: 1σ={uc['coverage_1sigma']:.1%}, 2σ={uc['coverage_2sigma']:.1%}, "
+          f"3σ={uc['coverage_3sigma']:.1%}, chi2={uc['chi2_reduced']:.2f}")
+    print(f"  Saved: fig10_uncertainty_coverage.png")
+
+
+def fig11_spatial_consistency():
+    """图11: 空间一致性 — 空间分块交叉验证。"""
+    print("[Fig 11] Spatial Consistency...")
+    (grav_lr, grav_kf, grav_bi, ship_hr, ship_lon, ship_lat, lon_hr, lat_hr,
+     lon_range, lat_range, ship_val_mask) = _load_japan_data(upscale=4)
+    ny_hr, nx_hr = grav_kf.shape
+
+    from utils import spatial_block_split, compute_metrics
+    from kalman_gravity import KalmanGravityReconstructor
+
+    blocks = spatial_block_split(ship_hr, n_blocks_row=4, n_blocks_col=4)
+    if len(blocks) < 4:
+        print(f"  Skipped: only {len(blocks)} blocks with data")
+        return
+
+    block_rmse_kf = np.full((4, 4), np.nan)
+    block_rmse_bi = np.full((4, 4), np.nan)
+    block_n = np.zeros((4, 4), dtype=int)
+    block_center_lat = np.full((4, 4), np.nan)
+
+    row_size = ny_hr // 4
+    col_size = nx_hr // 4
+    ny_lr_orig, nx_lr_orig = grav_lr.shape
+
+    for bi, (train_mask, val_mask) in enumerate(blocks):
+        i_block = bi // 4
+        j_block = bi % 4
+        if val_mask.sum() < 50:
+            continue
+
+        # Create downsampled LR from train-only regions
+        from scipy.ndimage import zoom
+        grav_lr_train = zoom(ship_hr, (ny_lr_orig / ny_hr, nx_lr_orig / nx_hr), order=1)
+
+        recon = KalmanGravityReconstructor(
+            grid_shape=(ny_hr, nx_hr), region_size_deg=16,
+            lr_grid_shape=(ny_lr_orig, nx_lr_orig))
+        recon.initialize(gravity_lr=grav_lr, gravity_ship=ship_hr,
+                         ship_train_mask=train_mask,
+                         process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
+        grav_block = recon.run(n_iterations=4, smooth_sigma=0.8, verbose=False)
+
+        m_kf = compute_metrics(grav_block, ship_hr, mask=val_mask)
+        m_bi = compute_metrics(grav_bi, ship_hr, mask=val_mask)
+        block_rmse_kf[i_block, j_block] = m_kf.get('RMSE', np.nan)
+        block_rmse_bi[i_block, j_block] = m_bi.get('RMSE', np.nan)
+        block_n[i_block, j_block] = val_mask.sum()
+        block_center_lat[i_block, j_block] = lat_hr[
+            min(i_block * row_size + row_size // 2, ny_hr - 1)]
+
+        print(f"  Block [{i_block},{j_block}]: KF={m_kf.get('RMSE',np.nan):.1f}, "
+              f"Bilinear={m_bi.get('RMSE',np.nan):.1f} mGal, n={val_mask.sum():,}")
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
+
+    ax = axes[0]
+    im = ax.imshow(block_rmse_kf, origin='lower', cmap='RdYlBu_r', aspect='auto',
+                   vmin=np.nanmin(block_rmse_kf), vmax=np.nanmax(block_rmse_kf))
+    for i in range(4):
+        for j in range(4):
+            if not np.isnan(block_rmse_kf[i, j]):
+                ax.text(j, i, f"{block_rmse_kf[i,j]:.1f}", ha='center', va='center',
+                        fontsize=8, fontweight='bold')
+    ax.set_title("KF 空间分块交叉验证 RMSE (mGal)")
+    ax.set_xlabel("经度方向块索引")
+    ax.set_ylabel("纬度方向块索引")
+    plt.colorbar(im, ax=ax, shrink=0.8)
+
+    ax = axes[1]
+    ax.barh(range(16), block_rmse_kf.ravel(), height=0.6,
+            color='steelblue', alpha=0.8, label='KF')
+    ax.barh(np.arange(16) + 0.3, block_rmse_bi.ravel(), height=0.6,
+            color='tomato', alpha=0.8, label='双线性')
+    ax.set_yticks(np.arange(16) + 0.15)
+    ax.set_yticklabels([f"[{i},{j}]" for i in range(4) for j in range(4)], fontsize=7)
+    ax.set_xlabel("RMSE (mGal)")
+    ax.set_title("各空间块 RMSE 对比")
+    ax.legend()
+
+    valid_rmses = block_rmse_kf[~np.isnan(block_rmse_kf)]
+    fig.suptitle(f"空间一致性检验\n"
+                 f"KF RMSE 均值={np.nanmean(valid_rmses):.1f}, "
+                 f"标准差={np.nanstd(valid_rmses):.1f} mGal "
+                 f"(变异系数={np.nanstd(valid_rmses)/np.nanmean(valid_rmses)*100:.0f}%)",
+                 fontsize=13, fontweight="bold")
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "fig11_spatial_consistency.png", dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Spatial CV: KF mean RMSE={np.nanmean(valid_rmses):.1f}±"
+          f"{np.nanstd(valid_rmses):.1f} mGal, CV={np.nanstd(valid_rmses)/np.nanmean(valid_rmses)*100:.0f}%")
+    print(f"  Saved: fig11_spatial_consistency.png")
+
+
 if __name__ == "__main__":
     print("Generating analysis figures...")
     for fig_func in [fig1_global_gravity_map, fig2_shipborne_distribution,
                      fig3_regional_zoom, fig4_scatter_and_histogram,
                      fig5_power_spectrum, fig6_bathymetry_inversion,
-                     fig7_summary_table]:
+                     fig7_summary_table,
+                     fig8_residual_diagnostics, fig9_parameter_sensitivity,
+                     fig10_uncertainty_coverage, fig11_spatial_consistency]:
         try:
             fig_func()
         except (FileNotFoundError, ValueError, RuntimeError, OSError) as e:

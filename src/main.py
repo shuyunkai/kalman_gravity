@@ -31,11 +31,17 @@ def main():
                                    fig4_scatter_and_histogram,
                                    fig5_power_spectrum,
                                    fig6_bathymetry_inversion,
-                                   fig7_summary_table)
+                                   fig7_summary_table,
+                                   fig8_residual_diagnostics,
+                                   fig9_parameter_sensitivity,
+                                   fig10_uncertainty_coverage,
+                                   fig11_spatial_consistency)
         for fig_func in [fig1_global_gravity_map, fig2_shipborne_distribution,
                          fig3_regional_zoom, fig4_scatter_and_histogram,
                          fig5_power_spectrum, fig6_bathymetry_inversion,
-                         fig7_summary_table]:
+                         fig7_summary_table,
+                         fig8_residual_diagnostics, fig9_parameter_sensitivity,
+                         fig10_uncertainty_coverage, fig11_spatial_consistency]:
             try:
                 fig_func()
             except (FileNotFoundError, ValueError, RuntimeError, OSError) as e:

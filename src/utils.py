@@ -208,6 +208,58 @@ def sediment_gravity_correction(sediment_thickness, drho_sed=500,
     return dg_si * 1e5  # mGal
 
 
+def compute_uncertainty_coverage(pred, P_diag, val_data, R_obs, grid_shape):
+    """计算 KF 不确定性估计的置信区间覆盖率。
+
+    对每个保留验证点 e = (pred - val) / sqrt(P + R).
+    若 KF 标定正确, e 应服从标准正态分布。
+
+    Returns dict with coverage_{1,2,3}sigma, chi2_reduced, std_residuals.
+    """
+    if P_diag.ndim == 1:
+        P_diag = P_diag.reshape(grid_shape)
+    mask = ~np.isnan(val_data) & ~np.isnan(pred)
+    if mask.sum() < 10:
+        return {}
+    p_vals = P_diag[mask].ravel()
+    pred_vals = pred[mask].ravel()
+    val_vals = val_data[mask].ravel()
+    std_residuals = (pred_vals - val_vals) / np.sqrt(np.maximum(p_vals + R_obs, 1e-10))
+    n = len(std_residuals)
+    return {
+        'std_residuals': std_residuals,
+        'coverage_1sigma': float(np.mean(np.abs(std_residuals) < 1.0)),
+        'coverage_2sigma': float(np.mean(np.abs(std_residuals) < 1.96)),
+        'coverage_3sigma': float(np.mean(np.abs(std_residuals) < 3.0)),
+        'chi2_reduced': float(np.mean(std_residuals ** 2)),
+        'n': n,
+    }
+
+
+def spatial_block_split(shipborne_data, n_blocks_row=4, n_blocks_col=4):
+    """将船载格网按空间划分为连续块, 用于空间交叉验证。
+
+    Returns list of (train_mask, val_mask) tuples.
+    """
+    ny, nx = shipborne_data.shape
+    row_size = ny // n_blocks_row
+    col_size = nx // n_blocks_col
+    block_masks = []
+    for i in range(n_blocks_row):
+        i0 = i * row_size
+        i1 = (i + 1) * row_size if i < n_blocks_row - 1 else ny
+        for j in range(n_blocks_col):
+            j0 = j * col_size
+            j1 = (j + 1) * col_size if j < n_blocks_col - 1 else nx
+            val_mask = np.zeros((ny, nx), dtype=bool)
+            val_mask[i0:i1, j0:j1] = True
+            val_mask = val_mask & ~np.isnan(shipborne_data)
+            train_mask = ~np.isnan(shipborne_data) & ~val_mask
+            if val_mask.sum() > 50:
+                block_masks.append((train_mask, val_mask))
+    return block_masks
+
+
 def plot_gravity_field(data_list, titles, save_path=None, figsize=(18, 5)):
     """并排绘制多个重力场图。"""
     n = len(data_list)
