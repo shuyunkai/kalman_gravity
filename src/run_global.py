@@ -56,8 +56,18 @@ def load_shipborne_all():
                 ds = nc.Dataset(tmp.name, "r")
                 vname = [v for v in ds.variables if len(ds[v].dimensions) >= 2][0]
                 data = ds.variables[vname][:].copy()
-                lon = ds.variables["lon"][:].copy()
-                lat = ds.variables["lat"][:].copy()
+                for coord_name in ["lon", "x", "longitude"]:
+                    if coord_name in ds.variables:
+                        lon = ds.variables[coord_name][:].copy()
+                        break
+                else:
+                    raise KeyError("No longitude coordinate found")
+                for coord_name in ["lat", "y", "latitude"]:
+                    if coord_name in ds.variables:
+                        lat = ds.variables[coord_name][:].copy()
+                        break
+                else:
+                    raise KeyError("No latitude coordinate found")
                 ds.close()
                 os.unlink(tmp.name)
 
@@ -119,15 +129,13 @@ def create_global_gravity_model(tile_size_lat=10):
         for i_lon in range(n_lon):
             j0 = i_lon * lon_tile_size
             j1 = min(j0 + lon_tile_size, nx)
-            done += 1
 
             tile_ny = i1 - i0
             tile_nx = j1 - j0
-            grav_tile = gravity_global[i0:i1, j0:j1].copy()
-
-            # Extract shipborne points in this tile
             if i0 >= i1 or j0 >= j1:
                 continue
+            done += 1
+            grav_tile = gravity_global[i0:i1, j0:j1].copy()
             tile_lat0 = lat_ssv[i0]
             tile_lat1 = lat_ssv[i1 - 1]
             tile_lon0 = lon_ssv[j0]
@@ -300,8 +308,18 @@ def super_resolve_regions_with_shipborne(gravity_1min, lon_1min, lat_1min, upsca
                 ds = nc.Dataset(tmp.name, "r")
                 vname = [v for v in ds.variables if len(ds[v].dimensions) >= 2][0]
                 ship_data = ds.variables[vname][:].copy()
-                ship_lon = ds.variables["lon"][:].copy()
-                ship_lat = ds.variables["lat"][:].copy()
+                for coord_name in ["lon", "x", "longitude"]:
+                    if coord_name in ds.variables:
+                        ship_lon = ds.variables[coord_name][:].copy()
+                        break
+                else:
+                    raise KeyError("No longitude coordinate found")
+                for coord_name in ["lat", "y", "latitude"]:
+                    if coord_name in ds.variables:
+                        ship_lat = ds.variables[coord_name][:].copy()
+                        break
+                else:
+                    raise KeyError("No latitude coordinate found")
                 ds.close()
                 os.unlink(tmp.name)
 

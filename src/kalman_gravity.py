@@ -205,7 +205,7 @@ class KalmanGravityReconstructor:
             P_smooth = P_diag_history[k] + C_k ** 2 * (P_smooth - P_pred)
             P_smooth = np.maximum(P_smooth, 0)
 
-        return x_smooth
+        return x_smooth, P_smooth
 
     def run(self, n_iterations=5, smooth_sigma=0.8, verbose=True):
         """运行迭代预测-更新循环 + RTS 反向平滑，返回重建的高分辨率重力场。"""
@@ -232,8 +232,8 @@ class KalmanGravityReconstructor:
                 print(f"  迭代 {it+1}/{n_iterations}: mean={x_2d.mean():.2f}, std={x_2d.std():.2f}, "
                       f"range=[{x_2d.min():.1f}, {x_2d.max():.1f}]")
 
-        x_final = self.smooth_backward(x_history, x_pred_history, p_history, smooth_sigma=smooth_sigma)
-        self._P_final = p_history[-1].reshape(self.ny, self.nx)
+        x_final, P_smooth = self.smooth_backward(x_history, x_pred_history, p_history, smooth_sigma=smooth_sigma)
+        self._P_final = P_smooth.reshape(self.ny, self.nx)
         return x_final.reshape(self.ny, self.nx)
 
 

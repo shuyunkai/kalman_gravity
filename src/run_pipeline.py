@@ -227,7 +227,7 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     print(f"  Region: lon=[{lon_range[0]}, {lon_range[1]}], lat=[{lat_range[0]}, {lat_range[1]}]")
 
     print("\n[1/3] Loading SSV33.1 satellite data...")
-    gravity_lr, vgg_lr, lon_lr, lat_lr = load_ssv_region(lon_range, lat_range)
+    gravity_lr, _, lon_lr, lat_lr = load_ssv_region(lon_range, lat_range)
     print(f"  Gravity: {gravity_lr.shape}")
 
     print("\n[2/3] Loading GEBCO bathymetry...")

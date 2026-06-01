@@ -140,8 +140,18 @@ def fig2_shipborne_distribution():
                 tmp.write(gzip.open(str(f), "rb").read())
                 tmp.close()
                 ds = nc.Dataset(tmp.name, "r")
-                lon = ds.variables["lon"][:]
-                lat = ds.variables["lat"][:]
+                for coord_name in ["lon", "x", "longitude"]:
+                    if coord_name in ds.variables:
+                        lon = ds.variables[coord_name][:]
+                        break
+                else:
+                    continue
+                for coord_name in ["lat", "y", "latitude"]:
+                    if coord_name in ds.variables:
+                        lat = ds.variables[coord_name][:]
+                        break
+                else:
+                    continue
                 ds.close()
                 os.unlink(tmp.name)
 
@@ -535,21 +545,7 @@ def fig8_residual_diagnostics():
     residual_bi = grav_bi - ship_hr
     lon_2d, lat_2d = np.meshgrid(lon_hr, lat_hr)
 
-    # Panel 3: spatial autocorrelation of KF residuals
     from scipy.ndimage import zoom as sp_zoom
-    mask_sub = mask[::4, ::4]
-    resid_sub = residual_kf[::4, ::4]
-    resid_sub[~mask_sub] = np.nan
-
-    # Compute 1D correlation along rows and columns where data exists
-    row_ac = []
-    for i in range(0, resid_sub.shape[0], 4):
-        row = resid_sub[i, :]
-        valid = ~np.isnan(row)
-        if valid.sum() > 10:
-            ac = np.correlate(row[valid] - np.nanmean(row[valid]),
-                              row[valid] - np.nanmean(row[valid]), mode='same')
-            row_ac.append(ac / ac.max())
 
     fig, axes = plt.subplots(2, 2, figsize=(13, 10))
 
@@ -603,7 +599,7 @@ def fig8_residual_diagnostics():
     for b in range(len(lat_bins) - 1):
         m = (lat_vals >= lat_bins[b]) & (lat_vals < lat_bins[b + 1])
         if m.sum() > 20:
-            band_rms.append(np.sqrt(np.mean(residual_kf[mask][m.ravel()[:residual_kf[mask].size]] ** 2)))
+            band_rms.append(np.sqrt(np.mean(residual_kf[mask][m] ** 2)))
             band_centers.append((lat_bins[b] + lat_bins[b + 1]) / 2)
     if band_rms:
         ax.bar(band_centers, band_rms, width=lat_bins[1] - lat_bins[0],
@@ -638,42 +634,13 @@ def fig9_parameter_sensitivity():
     process_values = [0.5, 1.0, 2.0, 4.0, 8.0]
     sat_values = [1.0, 2.0, 3.0, 5.0, 8.0]
 
-    # Load data once
-    lon_range, lat_range = (138, 152), (32, 48)
-    grav_path = DATA_DIR / "ssv32" / "grav_33.1.nc"
-    ds = xr.open_dataset(str(grav_path), engine=NC_ENGINE)
-    grav_lr = ds.z.sel(lon=slice(*lon_range), lat=slice(*lat_range)).values
-    ds.close()
+    # Reuse cached Japan data
+    (grav_lr, _, _, ship_hr, _, _, _, _,
+     _, _, _) = _load_japan_data(upscale=4)
     ny_lr, nx_lr = grav_lr.shape
-    upscale = 4
-    ny_hr, nx_hr = ny_lr * upscale, nx_lr * upscale
-    lon_hr = np.linspace(*lon_range, nx_hr)
-    lat_hr = np.linspace(*lat_range, ny_hr)
+    ny_hr, nx_hr = ship_hr.shape
 
     from kalman_gravity import KalmanGravityReconstructor
-    from scipy.interpolate import griddata as scipy_griddata
-
-    jap_path = DATA_DIR / "shipborne" / "Subduction_Bassett" / "Japan_Residual_gravity.grd.gz"
-    if not jap_path.exists():
-        print(f"  Skipped: {jap_path} not found")
-        return
-    import netCDF4 as nc4
-    tmp = tempfile.NamedTemporaryFile(suffix=".grd", delete=False)
-    tmp.write(gzip.open(str(jap_path), "rb").read())
-    tmp.close()
-    ds_j = nc4.Dataset(tmp.name, "r")
-    ship_g = ds_j.variables["z"][:].copy()
-    ship_lon = ds_j.variables["lon"][:].copy()
-    ship_lat = ds_j.variables["lat"][:].copy()
-    ds_j.close()
-    os.unlink(tmp.name)
-
-    lon2d, lat2d = np.meshgrid(ship_lon, ship_lat)
-    valid_s = ~np.isnan(ship_g) & (np.abs(ship_g) < 5000)
-    pts = np.column_stack([lon2d[valid_s], lat2d[valid_s], ship_g[valid_s]])
-    lon_hr2d, lat_hr2d = np.meshgrid(lon_hr, lat_hr)
-    ship_hr = scipy_griddata(pts[:, :2], pts[:, 2], (lon_hr2d, lat_hr2d), method="nearest")
-
     from utils import split_shipborne_mask, compute_metrics
     ship_train, ship_val = split_shipborne_mask(ship_hr, validation_fraction=0.3)
     if ship_val.sum() < 100:
@@ -725,40 +692,15 @@ def fig9_parameter_sensitivity():
 def fig10_uncertainty_coverage():
     """图10: 不确定性验证 — KF 置信区间覆盖率 vs 理论正态。"""
     print("[Fig 10] Uncertainty Coverage...")
-    lon_range, lat_range = (138, 152), (32, 48)
-    grav_path = DATA_DIR / "ssv32" / "grav_33.1.nc"
-    ds = xr.open_dataset(str(grav_path), engine=NC_ENGINE)
-    grav_lr = ds.z.sel(lon=slice(*lon_range), lat=slice(*lat_range)).values
-    ds.close()
+
+    # Reuse cached Japan data
+    (grav_lr, _, _, ship_hr, _, _, _, _,
+     _, _, _) = _load_japan_data(upscale=4)
     ny_lr, nx_lr = grav_lr.shape
-    upscale = 4
-    ny_hr, nx_hr = ny_lr * upscale, nx_lr * upscale
-    lon_hr = np.linspace(*lon_range, nx_hr)
-    lat_hr = np.linspace(*lat_range, ny_hr)
+    ny_hr, nx_hr = ship_hr.shape
 
-    import netCDF4 as nc4
     from kalman_gravity import KalmanGravityReconstructor
-    from scipy.interpolate import griddata as scipy_griddata
     from utils import split_shipborne_mask, compute_uncertainty_coverage
-
-    jap_path = DATA_DIR / "shipborne" / "Subduction_Bassett" / "Japan_Residual_gravity.grd.gz"
-    if not jap_path.exists():
-        print(f"  Skipped: {jap_path} not found")
-        return
-    tmp = tempfile.NamedTemporaryFile(suffix=".grd", delete=False)
-    tmp.write(gzip.open(str(jap_path), "rb").read())
-    tmp.close()
-    ds_j = nc4.Dataset(tmp.name, "r")
-    ship_g = ds_j.variables["z"][:].copy()
-    ship_lon = ds_j.variables["lon"][:].copy()
-    ship_lat = ds_j.variables["lat"][:].copy()
-    ds_j.close()
-    os.unlink(tmp.name)
-    lon2d, lat2d = np.meshgrid(ship_lon, ship_lat)
-    valid_s = ~np.isnan(ship_g) & (np.abs(ship_g) < 5000)
-    pts = np.column_stack([lon2d[valid_s], lat2d[valid_s], ship_g[valid_s]])
-    lon_hr2d, lat_hr2d = np.meshgrid(lon_hr, lat_hr)
-    ship_hr = scipy_griddata(pts[:, :2], pts[:, 2], (lon_hr2d, lat_hr2d), method="nearest")
 
     ship_train, ship_val = split_shipborne_mask(ship_hr, validation_fraction=0.3)
     if ship_val.sum() < 100:
@@ -772,7 +714,10 @@ def fig10_uncertainty_coverage():
                      ship_train_mask=ship_train,
                      process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
     grav_hr = recon.run(n_iterations=6, smooth_sigma=0.8, verbose=False)
-    P_final = getattr(recon, '_P_final', np.full_like(grav_hr, 4.0))
+    P_final = getattr(recon, '_P_final', None)
+    if P_final is None:
+        print("  WARNING: _P_final not available — using constant P=4.0 fallback")
+        P_final = np.full_like(grav_hr, 4.0)
 
     uc = compute_uncertainty_coverage(
         grav_hr, P_final, ship_hr, R_obs=1.0, grid_shape=(ny_hr, nx_hr))
@@ -853,17 +798,13 @@ def fig11_spatial_consistency():
         if val_mask.sum() < 50:
             continue
 
-        # Create downsampled LR from train-only regions
-        from scipy.ndimage import zoom
-        grav_lr_train = zoom(ship_hr, (ny_lr_orig / ny_hr, nx_lr_orig / nx_hr), order=1)
-
         recon = KalmanGravityReconstructor(
             grid_shape=(ny_hr, nx_hr), region_size_deg=16,
             lr_grid_shape=(ny_lr_orig, nx_lr_orig))
         recon.initialize(gravity_lr=grav_lr, gravity_ship=ship_hr,
                          ship_train_mask=train_mask,
                          process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
-        grav_block = recon.run(n_iterations=4, smooth_sigma=0.8, verbose=False)
+        grav_block = recon.run(n_iterations=2, smooth_sigma=0.8, verbose=False)
 
         m_kf = compute_metrics(grav_block, ship_hr, mask=val_mask)
         m_bi = compute_metrics(grav_bi, ship_hr, mask=val_mask)
