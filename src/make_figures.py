@@ -493,6 +493,6 @@ if __name__ == "__main__":
                      fig7_summary_table]:
         try:
             fig_func()
-        except Exception as e:
+        except (FileNotFoundError, ValueError, RuntimeError, OSError) as e:
             print(f"  Skipped {fig_func.__name__}: {e}")
     print(f"\nAll figures saved to: {OUTPUT_DIR}")

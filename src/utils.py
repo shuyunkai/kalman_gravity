@@ -87,19 +87,21 @@ def compute_vgg(gravity, dx_deg, lat_center=0, lat=None):
     dy_m = dx_deg * 111320
 
     if lat is not None and len(lat) == ny:
-        cos_lat = np.cos(np.radians(np.asarray(lat)))
-        cos_lat_2d = cos_lat[:, None]
+        cos_lat_2d = np.cos(np.radians(np.asarray(lat)))[:, None]
         dx_m = dx_deg * 111320 * cos_lat_2d
+        # fftfreq with array d produces (ny, nx) per-row wavenumber
+        kx = 2 * np.pi * np.fft.fftfreq(nx, dx_m)
     else:
         cos_lat = np.cos(np.radians(lat_center))
         dx_m = dx_deg * 111320 * cos_lat
+        kx = 2 * np.pi * np.fft.fftfreq(nx, dx_m)
 
-    kx = 2 * np.pi * np.fft.fftfreq(nx, dx_m)
     ky = 2 * np.pi * np.fft.fftfreq(ny, dy_m)
 
     if lat is not None and len(lat) == ny:
-        kx_grid, ky_grid = np.meshgrid(kx[0, :], ky)
-        kx_grid = kx_grid * cos_lat_2d
+        # kx already has per-row correction from fftfreq — use directly
+        kx_grid = kx
+        _, ky_grid = np.meshgrid(kx[0, :], ky)
     else:
         kx_grid, ky_grid = np.meshgrid(kx, ky)
 

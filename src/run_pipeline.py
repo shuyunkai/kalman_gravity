@@ -72,10 +72,17 @@ def load_gebco_region(lon_range, lat_range):
     var_name = [v for v in ds.variables if len(ds[v].dims) >= 2][0]
     ds_var = ds[var_name]
 
+    # Handle 0-360 vs -180-180 longitude conversion
+    ds_lon = ds.lon.values
+    lon0, lon1 = lon_range[0], lon_range[1]
+    if lon0 < 0 and ds_lon.min() >= 0:
+        lon0 += 360
+        lon1 += 360
+
     pad = 0.5
-    bathy = ds_var.sel(lon=slice(lon_range[0] - pad, lon_range[1] + pad),
+    bathy = ds_var.sel(lon=slice(lon0 - pad, lon1 + pad),
                         lat=slice(lat_range[0] - pad, lat_range[1] + pad)).values
-    lon_b = ds.lon.sel(lon=slice(lon_range[0] - pad, lon_range[1] + pad)).values
+    lon_b = ds.lon.sel(lon=slice(lon0 - pad, lon1 + pad)).values
     lat_b = ds.lat.sel(lat=slice(lat_range[0] - pad, lat_range[1] + pad)).values
     ds.close()
     return bathy, lon_b, lat_b
@@ -109,6 +116,8 @@ def _read_gmt_grd(filepath):
                 lat = ds.variables.get("latitude", ds.variables.get("y"))
                 lat = lat[:].copy() if lat is not None else None
             ds.close()
+            if lon is None or lat is None:
+                raise ValueError(f"Cannot determine lon/lat coordinates in {spath}")
             for _ in range(5):
                 try:
                     os.unlink(tmppath)
@@ -170,8 +179,8 @@ def load_shipborne_gravity(lon_grid, lat_grid):
                     continue
 
                 lon_2d, lat_2d = np.meshgrid(lon, lat)
-                mask = ((lon_2d >= lon_grid[0]) & (lon_2d <= lon_grid[-1]) &
-                        (lat_2d >= lat_grid[0]) & (lat_2d <= lat_grid[-1]))
+                mask = ((lon_2d >= lon_grid.min()) & (lon_2d <= lon_grid.max()) &
+                        (lat_2d >= lat_grid.min()) & (lat_2d <= lat_grid.max()))
                 if mask.sum() == 0:
                     continue
 

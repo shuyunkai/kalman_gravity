@@ -75,6 +75,8 @@ class KalmanGravityReconstructor:
         """更新步-卫星观测：用低分辨率格网约束高分辨率重建结果。
 
         每个低分辨率像元对应一块高分辨率像元，约束块均值接近卫星观测值。
+        NOTE: 使用块均值 P 和标量近似 Kalman gain，导致块内 P 均一化。
+        这是高维状态下的计算效率近似，块内各格点的空间不确定性信息会丢失。
         """
         if not self._initialized:
             raise RuntimeError("请先调用 initialize() 初始化滤波器")
@@ -171,6 +173,8 @@ class KalmanGravityReconstructor:
         if mask_prop.sum() > 0:
             blend = correction_field[mask_prop] / np.maximum(weight_field[mask_prop], 1e-10)
             x_2d[mask_prop] += prop_fraction * blend
+            info_gain = prop_fraction * np.minimum(weight_field[mask_prop], 1.0)
+            P_2d[mask_prop] = P_2d[mask_prop] * np.maximum(1.0 - info_gain, 0.1)
 
         self.x = x_2d.ravel()
         self.P_diag = P_2d.ravel()

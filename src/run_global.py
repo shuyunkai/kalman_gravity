@@ -125,6 +125,8 @@ def create_global_gravity_model(tile_size_lat=10):
             grav_tile = gravity_global[i0:i1, j0:j1].copy()
 
             # Extract shipborne points in this tile
+            if i0 >= i1 or j0 >= j1:
+                continue
             tile_lat0 = lat_ssv[i0]
             tile_lat1 = lat_ssv[i1 - 1]
             tile_lon0 = lon_ssv[j0]
