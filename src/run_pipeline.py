@@ -56,7 +56,7 @@ def load_ssv_region(lon_range, lat_range):
         vgg = np.concatenate([v1, v2], axis=1)
         l1 = ds_g.lon.sel(lon=slice(lon0, lmax)).values
         l2 = ds_g.lon.sel(lon=slice(-lmax, lon1)).values
-        lon = np.concatenate([l1, l2])
+        lon = np.sort(np.concatenate([l1, l2]))
 
     lat = ds_g.lat.sel(lat=lat_slice).values
     ds_g.close()
@@ -120,12 +120,18 @@ def _read_gmt_grd(filepath):
 
         with open(tmppath, "rb") as f:
             hdr = f.read(892).decode("latin-1", errors="ignore")
-            nx = int(re.search(r"n_columns\s*=\s*(\d+)", hdr).group(1))
-            ny = int(re.search(r"n_rows\s*=\s*(\d+)", hdr).group(1))
-            xmin = float(re.search(r"x_min\s*=\s*([\-\d.]+)", hdr).group(1))
-            xmax = float(re.search(r"x_max\s*=\s*([\-\d.]+)", hdr).group(1))
-            ymin = float(re.search(r"y_min\s*=\s*([\-\d.]+)", hdr).group(1))
-            ymax = float(re.search(r"y_max\s*=\s*([\-\d.]+)", hdr).group(1))
+            nx = int((re.search(r"n_columns\s*=\s*(\d+)", hdr)
+                      or re.search(r"ncols\s*=\s*(\d+)", hdr, re.IGNORECASE)).group(1))
+            ny = int((re.search(r"n_rows\s*=\s*(\d+)", hdr)
+                      or re.search(r"nrows\s*=\s*(\d+)", hdr, re.IGNORECASE)).group(1))
+            xmin = float((re.search(r"x_min\s*=\s*([\-\d.]+)", hdr)
+                          or re.search(r"xmin\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE)).group(1))
+            xmax = float((re.search(r"x_max\s*=\s*([\-\d.]+)", hdr)
+                          or re.search(r"xmax\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE)).group(1))
+            ymin = float((re.search(r"y_min\s*=\s*([\-\d.]+)", hdr)
+                          or re.search(r"ymin\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE)).group(1))
+            ymax = float((re.search(r"y_max\s*=\s*([\-\d.]+)", hdr)
+                          or re.search(r"ymax\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE)).group(1))
             data = np.frombuffer(f.read(nx * ny * 4), dtype=np.float32).reshape(ny, nx)
         os.unlink(tmppath)
         return data, np.linspace(xmin, xmax, nx), np.linspace(ymin, ymax, ny)

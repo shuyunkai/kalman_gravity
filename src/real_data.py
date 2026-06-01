@@ -146,7 +146,11 @@ def load_shipborne_mgds(cruise_name, data_dir=None):
 
 
 def _parse_mgd77_gravity(filepath):
-    """解析 MGD77 格式重力数据，返回经度、纬度、重力异常。"""
+    """解析 MGD77 格式重力数据，返回经度、纬度、重力异常。
+
+    NOTE: MGD77 是固定列宽格式，这里用空白分割作为近似解析。
+    对于严格符合 MGD77 标准的数据，列位置不会因空白分割而偏移。
+    """
     import pandas as pd
     try:
         df = pd.read_csv(filepath, sep=r"\s+", comment="#")

@@ -38,7 +38,7 @@ def main():
                          fig7_summary_table]:
             try:
                 fig_func()
-            except Exception as e:
+            except (FileNotFoundError, ValueError, RuntimeError, OSError) as e:
                 print(f"  Skipped {fig_func.__name__}: {e}")
     else:
         lon_min, lon_max, lat_min, lat_max = args.region

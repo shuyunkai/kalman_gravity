@@ -145,7 +145,7 @@ def fig2_shipborne_distribution():
                 ds.close()
                 os.unlink(tmp.name)
 
-                color = colors[c_idx % 20]
+                color = colors[c_idx % len(colors)]
                 rect = Rectangle((lon.min(), lat.min()), lon.max() - lon.min(),
                                  lat.max() - lat.min(),
                                  facecolor=color, edgecolor=color,
@@ -182,6 +182,10 @@ def _load_japan_data(upscale=4):
     ds.close()
 
     jap_path = DATA_DIR / "shipborne" / "Subduction_Bassett" / "Japan_Residual_gravity.grd.gz"
+    if not jap_path.exists():
+        raise FileNotFoundError(
+            f"日本海沟船载数据未找到: {jap_path}\n"
+            f"请从 https://www.marine-geo.org 下载 Subduction_Bassett 数据集")
     tmp = tempfile.NamedTemporaryFile(suffix=".grd", delete=False)
     tmp.write(gzip.open(str(jap_path), "rb").read())
     tmp.close()

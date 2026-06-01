@@ -87,16 +87,12 @@ def create_global_gravity_model(tile_size_lat=10):
 
     print("\n[1/4] Loading SSV33.1 global gravity...")
     grav_path = DATA_DIR / "ssv32" / "grav_33.1.nc"
-    curv_path = DATA_DIR / "ssv32" / "curv_33.1.nc"
 
     ds_g = xr.open_dataset(str(grav_path), engine=NC_ENGINE)
-    ds_c = xr.open_dataset(str(curv_path), engine=NC_ENGINE)
     gravity_global = ds_g.z.values
-    vgg_global = ds_c.z.values
     lon_ssv = ds_g.lon.values
     lat_ssv = ds_g.lat.values
     ds_g.close()
-    ds_c.close()
 
     print(f"  Gravity shape: {gravity_global.shape}")
     print(f"  Lat: [{lat_ssv.min():.1f}, {lat_ssv.max():.1f}]")
@@ -236,7 +232,8 @@ def create_global_gravity_model(tile_size_lat=10):
             # Interpolate KF to ref grid for comparison
             from scipy.interpolate import RegularGridInterpolator
             interp = RegularGridInterpolator(
-                (lat_ssv, lon_ssv), gravity_kf.astype(np.float64),
+                (lat_ssv.astype(np.float64), lon_ssv.astype(np.float64)),
+                gravity_kf.astype(np.float32),
                 bounds_error=False, fill_value=np.nan)
             lon_ref_2d, lat_ref_2d = np.meshgrid(lon_ref, lat_ref)
             pts = np.column_stack([lat_ref_2d.ravel(), lon_ref_2d.ravel()])
@@ -293,8 +290,15 @@ def super_resolve_regions_with_shipborne(gravity_1min, lon_1min, lat_1min, upsca
                 lat_min_p = max(-80, lat_min - pad)
                 lat_max_p = min(80, lat_max + pad)
 
-                ilat0 = np.searchsorted(lat_1min, lat_min_p)
-                ilat1 = np.searchsorted(lat_1min, lat_max_p)
+                if lat_1min[0] > lat_1min[-1]:
+                    lat_asc = lat_1min[::-1]
+                    n = len(lat_1min)
+                    p0 = np.searchsorted(lat_asc, lat_min_p)
+                    p1 = np.searchsorted(lat_asc, lat_max_p)
+                    ilat0, ilat1 = n - p1, n - p0
+                else:
+                    ilat0 = np.searchsorted(lat_1min, lat_min_p)
+                    ilat1 = np.searchsorted(lat_1min, lat_max_p)
                 ilon0 = np.searchsorted(lon_1min, lon_min_p)
                 ilon1 = np.searchsorted(lon_1min, lon_max_p)
 

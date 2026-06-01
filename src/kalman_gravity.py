@@ -94,7 +94,6 @@ class KalmanGravityReconstructor:
                 block = x_2d[i0:i1, j0:j1]
                 block_flat = block.ravel()
                 z = self.gravity_lr[i, j]
-                n_block = len(block_flat)
 
                 z_pred = block_flat.mean()
                 P_block = self.P_diag.reshape(self.ny, self.nx)[i0:i1, j0:j1].mean()
@@ -464,7 +463,7 @@ class KalmanBathymetryInverter:
         g_s = gravity_ship[mask]
         b_s = bathy_ship[mask]
 
-        grav_bathy_ratio = np.median(np.abs(g_s) / np.maximum(np.abs(b_s), 1))
+        grav_bathy_ratio = np.median(np.abs(g_s) / np.maximum(np.abs(b_s), 10))
         drho_est = grav_bathy_ratio * 1e-5 / (2 * np.pi * self.G)
         drho_est = max(500, min(3000, drho_est))
         self.drho = drho_est
@@ -558,9 +557,10 @@ class KalmanBathymetryInverter:
             jacobian_update = self.gravity_to_bathymetry_linear(
                 residual, k_min=self.k_min, k_max=self.k_max)
 
-            p_median = np.median(self.P_diag[self.P_diag > 0])
-            k_gain = lr * np.sqrt(p_median / (p_median + self.obs_noise_std ** 2 + 1e-10))
-            x_2d_updated = x_2d + k_gain * jacobian_update
+            P_2d = self.P_diag.reshape(self.ny, self.nx)
+            R = self.obs_noise_std ** 2
+            k_gain_2d = lr * np.sqrt(np.maximum(P_2d, 0) / (P_2d + R + 1e-10))
+            x_2d_updated = x_2d + k_gain_2d * jacobian_update
 
             d_min = getattr(self, 'depth_min', -11000)
             d_max = getattr(self, 'depth_max', 100)

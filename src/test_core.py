@@ -18,7 +18,7 @@ def test_parker_roundtrip():
     grav = inverter.gravity_forward(bathy, d=3000, drho=1700)
     inverter.apply_flexural_isostasy(Te=10e3)
     bathy_rec = inverter.gravity_to_bathymetry_linear(
-        grav, d=3000, drho=1700, k_min=2 * np.pi / 160000, k_max=2 * np.pi / 2000)
+        grav, d=3000, drho=1700, k_min=2 * np.pi / 160000, k_max=None)
 
     corr = np.corrcoef(bathy.ravel(), bathy_rec.ravel())[0, 1]
     assert corr > 0.5, f"Parker roundtrip correlation too low: {corr:.3f}"
