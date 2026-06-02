@@ -575,19 +575,20 @@ def fig8_residual_diagnostics():
 
     # Panel 2: Residual vs distance to nearest ship point
     ax = axes[0, 1]
+    from scipy.spatial import cKDTree
     ship_pts = np.column_stack([
         lon_2d[mask], lat_2d[mask], ship_hr[mask]])
-    # Subsample ship points for distance computation
     n_pts = min(2000, len(ship_pts))
     idx_pts = np.random.default_rng(42).choice(len(ship_pts), n_pts, replace=False)
     ship_sample = ship_pts[idx_pts, :2]
 
-    # Compute distance from each validation point to nearest ship point
-    dists = np.full(mask.sum(), np.nan)
-    for k, (ii, jj) in enumerate(zip(*np.where(mask))):
-        dlon = (lon_2d[ii, jj] - ship_sample[:, 0]) * 111.32 * np.cos(np.radians(lat_2d[ii, jj]))
-        dlat = (lat_2d[ii, jj] - ship_sample[:, 1]) * 111.32
-        dists[k] = np.sqrt(dlon**2 + dlat**2).min()
+    val_lonlat = np.column_stack([lon_2d[mask].ravel(), lat_2d[mask].ravel()])
+    # Build KDTree with approximate spherical distance
+    cos_lat = np.cos(np.radians(np.median(lat_2d[mask])))
+    ship_xy = ship_sample * [111.32 * cos_lat, 111.32]
+    val_xy = val_lonlat * [111.32 * cos_lat, 111.32]
+    tree = cKDTree(ship_xy)
+    dists, _ = tree.query(val_xy)
 
     ax.scatter(dists, residual_kf[mask].ravel()[:len(dists)],
                alpha=0.15, s=1, c='steelblue')

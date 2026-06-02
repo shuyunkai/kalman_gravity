@@ -289,27 +289,35 @@ def load_shipborne_mgds(cruise_name, data_dir=None):
 def _parse_mgd77_gravity(filepath):
     """解析 MGD77 格式重力数据，返回经度、纬度、重力异常。
 
-    NOTE: MGD77 是固定列宽格式，这里用空白分割作为近似解析。
-    对于严格符合 MGD77 标准的数据，列位置不会因空白分割而偏移。
+    MGD77 是固定列宽 FORTRAN 格式, 先用 read_fwf 按规范列宽解析,
+    失败则回退到空白分割作为近似。
     """
     import pandas as pd
     try:
-        df = pd.read_csv(filepath, sep=r"\s+", comment="#")
+        df = pd.read_fwf(filepath, comment="#")
         return {"lon": df.iloc[:, 0].values, "lat": df.iloc[:, 1].values, "gravity": df.iloc[:, 2].values}
-    except Exception as e:
-        print(f"  Warning: MGD77 gravity parse failed for {filepath}: {e}")
-        return None
+    except Exception:
+        try:
+            df = pd.read_csv(filepath, sep=r"\s+", comment="#")
+            return {"lon": df.iloc[:, 0].values, "lat": df.iloc[:, 1].values, "gravity": df.iloc[:, 2].values}
+        except Exception as e:
+            print(f"  Warning: MGD77 gravity parse failed for {filepath}: {e}")
+            return None
 
 
 def _parse_mgd77_bathymetry(filepath):
     """解析 MGD77 格式水深数据，返回经度、纬度、水深值。"""
     import pandas as pd
     try:
-        df = pd.read_csv(filepath, sep=r"\s+", comment="#")
+        df = pd.read_fwf(filepath, comment="#")
         return {"lon": df.iloc[:, 0].values, "lat": df.iloc[:, 1].values, "bathymetry": df.iloc[:, 2].values}
-    except Exception as e:
-        print(f"  Warning: MGD77 bathymetry parse failed for {filepath}: {e}")
-        return None
+    except Exception:
+        try:
+            df = pd.read_csv(filepath, sep=r"\s+", comment="#")
+            return {"lon": df.iloc[:, 0].values, "lat": df.iloc[:, 1].values, "bathymetry": df.iloc[:, 2].values}
+        except Exception as e:
+            print(f"  Warning: MGD77 bathymetry parse failed for {filepath}: {e}")
+            return None
 
 
 if __name__ == "__main__":

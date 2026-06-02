@@ -130,18 +130,36 @@ def _read_gmt_grd(filepath):
 
         with open(tmppath, "rb") as f:
             hdr = f.read(892).decode("latin-1", errors="ignore")
-            nx = int((re.search(r"n_columns\s*=\s*(\d+)", hdr)
-                      or re.search(r"ncols\s*=\s*(\d+)", hdr, re.IGNORECASE)).group(1))
-            ny = int((re.search(r"n_rows\s*=\s*(\d+)", hdr)
-                      or re.search(r"nrows\s*=\s*(\d+)", hdr, re.IGNORECASE)).group(1))
-            xmin = float((re.search(r"x_min\s*=\s*([\-\d.]+)", hdr)
-                          or re.search(r"xmin\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE)).group(1))
-            xmax = float((re.search(r"x_max\s*=\s*([\-\d.]+)", hdr)
-                          or re.search(r"xmax\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE)).group(1))
-            ymin = float((re.search(r"y_min\s*=\s*([\-\d.]+)", hdr)
-                          or re.search(r"ymin\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE)).group(1))
-            ymax = float((re.search(r"y_max\s*=\s*([\-\d.]+)", hdr)
-                          or re.search(r"ymax\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE)).group(1))
+            m = (re.search(r"n_columns\s*=\s*(\d+)", hdr)
+                 or re.search(r"ncols\s*=\s*(\d+)", hdr, re.IGNORECASE))
+            if m is None:
+                raise ValueError(f"Cannot parse grid dimensions from {spath}")
+            nx = int(m.group(1))
+            m = (re.search(r"n_rows\s*=\s*(\d+)", hdr)
+                 or re.search(r"nrows\s*=\s*(\d+)", hdr, re.IGNORECASE))
+            if m is None:
+                raise ValueError(f"Cannot parse grid dimensions from {spath}")
+            ny = int(m.group(1))
+            m = (re.search(r"x_min\s*=\s*([\-\d.]+)", hdr)
+                 or re.search(r"xmin\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE))
+            if m is None:
+                raise ValueError(f"Cannot parse x bounds from {spath}")
+            xmin = float(m.group(1))
+            m = (re.search(r"x_max\s*=\s*([\-\d.]+)", hdr)
+                 or re.search(r"xmax\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE))
+            if m is None:
+                raise ValueError(f"Cannot parse x bounds from {spath}")
+            xmax = float(m.group(1))
+            m = (re.search(r"y_min\s*=\s*([\-\d.]+)", hdr)
+                 or re.search(r"ymin\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE))
+            if m is None:
+                raise ValueError(f"Cannot parse y bounds from {spath}")
+            ymin = float(m.group(1))
+            m = (re.search(r"y_max\s*=\s*([\-\d.]+)", hdr)
+                 or re.search(r"ymax\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE))
+            if m is None:
+                raise ValueError(f"Cannot parse y bounds from {spath}")
+            ymax = float(m.group(1))
             data = np.frombuffer(f.read(nx * ny * 4), dtype=np.float32).reshape(ny, nx)
         os.unlink(tmppath)
         return data, np.linspace(xmin, xmax, nx), np.linspace(ymin, ymax, ny)
@@ -194,14 +212,22 @@ def load_shipborne_gravity(lon_grid, lat_grid):
                     idx = np.unravel_index(idx_flat, valid.shape)
                 else:
                     idx = np.where(valid)
-                for i, j in zip(idx[0], idx[1]):
-                    pt = (lon[j], lat[i], data[i, j])
-                    if is_gravity and abs(data[i, j]) < 5000:
-                        gravity_points.append(pt)
-                    elif is_bathy and -12000 < data[i, j] < 5000:
-                        bathy_points.append(pt)
+                n_pts = len(idx[0])
+                pt_lon = lon[idx[1]]
+                pt_lat = lat[idx[0]]
+                pt_val = data[idx]
+                if is_gravity:
+                    grav_mask = np.abs(pt_val) < 5000
+                    if grav_mask.sum() > 0:
+                        gravity_points.append(np.column_stack([
+                            pt_lon[grav_mask], pt_lat[grav_mask], pt_val[grav_mask]]))
+                elif is_bathy:
+                    bathy_mask = (pt_val > -12000) & (pt_val < 5000)
+                    if bathy_mask.sum() > 0:
+                        bathy_points.append(np.column_stack([
+                            pt_lon[bathy_mask], pt_lat[bathy_mask], pt_val[bathy_mask]]))
 
-                print(f"  Loaded {f.name}: {len(idx[0])} points (from {n_valid:,})")
+                print(f"  Loaded {f.name}: {n_pts} points (from {n_valid:,})")
             except Exception as e:
                 print(f"  Warning: skip {f.name}: {e}")
 
@@ -210,10 +236,10 @@ def load_shipborne_gravity(lon_grid, lat_grid):
     ship_bathy = np.full(lon_mesh.shape, np.nan)
 
     if gravity_points:
-        pts = np.array(gravity_points)
+        pts = np.vstack(gravity_points)
         ship_grav = griddata(pts[:, :2], pts[:, 2], (lon_mesh, lat_mesh), method="nearest")
     if bathy_points:
-        pts = np.array(bathy_points)
+        pts = np.vstack(bathy_points)
         ship_bathy = griddata(pts[:, :2], pts[:, 2], (lon_mesh, lat_mesh), method="nearest")
 
     return ship_grav, ship_bathy

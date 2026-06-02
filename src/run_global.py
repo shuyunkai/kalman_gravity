@@ -24,7 +24,11 @@ NC_ENGINE = "h5netcdf"
 
 
 def load_shipborne_all():
-    """加载全部船载重力格网数据，返回散点数组 (lon, lat, gravity)。首次加载后缓存。"""
+    """加载全部船载重力格网数据，返回散点数组 (lon, lat, gravity)。首次加载后缓存。
+
+    NOTE: .grd/.grd.gz 读取逻辑与 run_pipeline._read_gmt_grd() 重复。
+    如需添加新格式支持，两处需同步更新。TODO: 提取到 utils.read_gmt_grd()。
+    """
     cache_file = DATA_DIR / "shipborne_cache.npy"
     ship_dir = DATA_DIR / "shipborne"
     # Check cache freshness: compare file count and newest mtime
@@ -223,28 +227,30 @@ def create_global_gravity_model(tile_size_lat=10):
     tmp_out = tmpmod.NamedTemporaryFile(suffix=".nc", delete=False)
     tmp_path = tmp_out.name
     tmp_out.close()
-    ds_out = nc.Dataset(tmp_path, "w", format="NETCDF4")
-
-    ds_out.createDimension("lon", nx)
-    ds_out.createDimension("lat", ny)
-    v_lon = ds_out.createVariable("lon", "f8", ("lon",))
-    v_lat = ds_out.createVariable("lat", "f8", ("lat",))
-    v_grav = ds_out.createVariable("gravity_anomaly", "f4", ("lat", "lon"), zlib=True, complevel=4)
-    v_grav.long_name = "Free-air gravity anomaly"
-    v_grav.units = "mGal"
-    v_vgg = ds_out.createVariable("vgg", "f4", ("lat", "lon"), zlib=True, complevel=4)
-    v_vgg.long_name = "Vertical gravity gradient"
-    v_vgg.units = "Eotvos"
-
-    v_lon[:] = lon_ssv
-    v_lat[:] = lat_ssv
-    v_grav[:] = gravity_kf.astype(np.float32)
-    v_vgg[:] = vgg_kf.astype(np.float32)
-    ds_out.close()
-
-    import shutil
-    output_nc = OUTPUT_DIR / "kalman_gravity_1min.nc"
-    shutil.move(tmp_path, str(output_nc))
+    try:
+        ds_out = nc.Dataset(tmp_path, "w", format="NETCDF4")
+        ds_out.createDimension("lon", nx)
+        ds_out.createDimension("lat", ny)
+        v_lon = ds_out.createVariable("lon", "f8", ("lon",))
+        v_lat = ds_out.createVariable("lat", "f8", ("lat",))
+        v_grav = ds_out.createVariable("gravity_anomaly", "f4", ("lat", "lon"), zlib=True, complevel=4)
+        v_grav.long_name = "Free-air gravity anomaly"
+        v_grav.units = "mGal"
+        v_vgg = ds_out.createVariable("vgg", "f4", ("lat", "lon"), zlib=True, complevel=4)
+        v_vgg.long_name = "Vertical gravity gradient"
+        v_vgg.units = "Eotvos"
+        v_lon[:] = lon_ssv
+        v_lat[:] = lat_ssv
+        v_grav[:] = gravity_kf.astype(np.float32)
+        v_vgg[:] = vgg_kf.astype(np.float32)
+        ds_out.close()
+        import shutil
+        output_nc = OUTPUT_DIR / "kalman_gravity_1min.nc"
+        shutil.move(tmp_path, str(output_nc))
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
 
     print(f"\n{'='*60}")
     print(f"  GLOBAL GRAVITY FIELD MODEL COMPLETE")

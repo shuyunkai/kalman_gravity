@@ -96,6 +96,7 @@ class KalmanGravityReconstructor:
             raise RuntimeError("请先调用 initialize() 初始化滤波器")
 
         x_2d = self.x.reshape(self.ny, self.nx)
+        P_2d = self.P_diag.reshape(self.ny, self.nx)
         lr_ny, lr_nx = self.gravity_lr.shape
         hr_per_lr_y = self.ny // lr_ny
         hr_per_lr_x = self.nx // lr_nx
@@ -112,13 +113,12 @@ class KalmanGravityReconstructor:
                 z = self.gravity_lr[i, j]
 
                 z_pred = block_flat.mean()
-                P_block = self.P_diag.reshape(self.ny, self.nx)[i0:i1, j0:j1].mean()
+                P_block = P_2d[i0:i1, j0:j1].mean()
                 K = P_block / (P_block + self.R_sat_val)
                 innovation = z - z_pred
                 block_flat_updated = block_flat + K * innovation
                 x_2d[i0:i1, j0:j1] = block_flat_updated.reshape(block.shape)
-                P_updated = (1 - K) * P_block
-                self.P_diag.reshape(self.ny, self.nx)[i0:i1, j0:j1] = P_updated
+                P_2d[i0:i1, j0:j1] = (1 - K) * P_block
 
         self.x = x_2d.ravel()
 
