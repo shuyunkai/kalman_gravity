@@ -1,5 +1,7 @@
 """工具函数：评估指标计算、VGG计算、频域滤波、数据插值、可视化。"""
+import os, re, time, gzip, tempfile
 import numpy as np
+import netCDF4 as nc
 from scipy.interpolate import griddata
 import matplotlib
 matplotlib.use("Agg")
@@ -280,6 +282,81 @@ def spatial_block_split(shipborne_data, n_blocks_row=4, n_blocks_col=4):
             if val_mask.sum() > 50:
                 block_masks.append((train_mask, val_mask))
     return block_masks
+
+
+def read_gmt_grd(filepath):
+    """读取 .grd/.grd.gz 文件 (NetCDF3 或 GMT 二进制), 返回 (data, lon, lat).
+
+    统一接口, 消除 run_global 和 run_pipeline 中的重复实现。
+    """
+    spath = str(filepath)
+    tmp = tempfile.NamedTemporaryFile(suffix=".grd", delete=False,
+                                      prefix=f"grd_{os.getpid()}_")
+    tmppath = tmp.name
+    try:
+        if spath.endswith(".gz"):
+            tmp.write(gzip.open(spath, "rb").read())
+        else:
+            tmp.write(open(spath, "rb").read())
+        tmp.close()
+
+        ds = nc.Dataset(tmppath, "r")
+        var_names = [v for v in ds.variables if len(ds[v].dimensions) >= 2]
+        if var_names:
+            vname = var_names[0]
+            data = ds.variables[vname][:].copy()
+            lon = None
+            lat = None
+            for coord_name in ["lon", "x", "longitude"]:
+                if coord_name in ds.variables:
+                    lon = ds.variables[coord_name][:].copy()
+                    break
+            for coord_name in ["lat", "y", "latitude"]:
+                if coord_name in ds.variables:
+                    lat = ds.variables[coord_name][:].copy()
+                    break
+            ds.close()
+            if lon is None or lat is None:
+                raise ValueError(f"Cannot determine lon/lat coordinates in {spath}")
+            return np.squeeze(data), np.squeeze(lon), np.squeeze(lat)
+        ds.close()
+
+        with open(tmppath, "rb") as f:
+            hdr = f.read(892).decode("latin-1", errors="ignore")
+            m = (re.search(r"n_columns\s*=\s*(\d+)", hdr)
+                 or re.search(r"ncols\s*=\s*(\d+)", hdr, re.IGNORECASE))
+            if m is None:
+                raise ValueError(f"Cannot parse grid dims from {spath}")
+            nx = int(m.group(1))
+            m = (re.search(r"n_rows\s*=\s*(\d+)", hdr)
+                 or re.search(r"nrows\s*=\s*(\d+)", hdr, re.IGNORECASE))
+            if m is None:
+                raise ValueError(f"Cannot parse grid dims from {spath}")
+            ny = int(m.group(1))
+            m = (re.search(r"x_min\s*=\s*([\-\d.]+)", hdr)
+                 or re.search(r"xmin\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE))
+            if m is None:
+                raise ValueError(f"Cannot parse x bounds from {spath}")
+            xmin = float(m.group(1))
+            m = (re.search(r"x_max\s*=\s*([\-\d.]+)", hdr)
+                 or re.search(r"xmax\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE))
+            if m is None:
+                raise ValueError(f"Cannot parse x bounds from {spath}")
+            xmax = float(m.group(1))
+            m = (re.search(r"y_min\s*=\s*([\-\d.]+)", hdr)
+                 or re.search(r"ymin\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE))
+            if m is None:
+                raise ValueError(f"Cannot parse y bounds from {spath}")
+            ymin = float(m.group(1))
+            m = (re.search(r"y_max\s*=\s*([\-\d.]+)", hdr)
+                 or re.search(r"ymax\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE))
+            if m is None:
+                raise ValueError(f"Cannot parse y bounds from {spath}")
+            ymax = float(m.group(1))
+            data = np.frombuffer(f.read(nx * ny * 4), dtype=np.float32).reshape(ny, nx)
+        return data, np.linspace(xmin, xmax, nx), np.linspace(ymin, ymax, ny)
+    finally:
+        os.unlink(tmppath)
 
 
 def plot_gravity_field(data_list, titles, save_path=None, figsize=(18, 5)):

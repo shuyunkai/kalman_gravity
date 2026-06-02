@@ -15,7 +15,7 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
 sys.path.insert(0, str(Path(__file__).parent))
-from utils import compute_metrics, split_shipborne_mask
+from utils import compute_metrics, split_shipborne_mask, read_gmt_grd
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 OUTPUT_DIR = Path(__file__).parent.parent / "output_figures"
@@ -136,24 +136,7 @@ def fig2_shipborne_distribution():
             continue
         for f in cruise_dir.glob("*.grd.gz"):
             try:
-                tmp = tempfile.NamedTemporaryFile(suffix=".grd", delete=False)
-                tmp.write(gzip.open(str(f), "rb").read())
-                tmp.close()
-                ds = nc.Dataset(tmp.name, "r")
-                for coord_name in ["lon", "x", "longitude"]:
-                    if coord_name in ds.variables:
-                        lon = ds.variables[coord_name][:]
-                        break
-                else:
-                    continue
-                for coord_name in ["lat", "y", "latitude"]:
-                    if coord_name in ds.variables:
-                        lat = ds.variables[coord_name][:]
-                        break
-                else:
-                    continue
-                ds.close()
-                os.unlink(tmp.name)
+                _, lon, lat = read_gmt_grd(str(f))
 
                 color = colors[c_idx % len(colors)]
                 rect = Rectangle((lon.min(), lat.min()), lon.max() - lon.min(),
@@ -196,15 +179,7 @@ def _load_japan_data(upscale=4):
         raise FileNotFoundError(
             f"日本海沟船载数据未找到: {jap_path}\n"
             f"请从 https://www.marine-geo.org 下载 Subduction_Bassett 数据集")
-    tmp = tempfile.NamedTemporaryFile(suffix=".grd", delete=False)
-    tmp.write(gzip.open(str(jap_path), "rb").read())
-    tmp.close()
-    ds_j = nc.Dataset(tmp.name, "r")
-    ship_g = ds_j.variables["z"][:].copy()
-    ship_lon = ds_j.variables["lon"][:].copy()
-    ship_lat = ds_j.variables["lat"][:].copy()
-    ds_j.close()
-    os.unlink(tmp.name)
+    ship_g, ship_lon, ship_lat = read_gmt_grd(str(jap_path))
 
     from kalman_gravity import KalmanGravityReconstructor
     ny_lr, nx_lr = grav_lr.shape

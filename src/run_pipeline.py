@@ -8,7 +8,7 @@ import xarray as xr
 from scipy.ndimage import zoom, gaussian_filter
 from scipy.interpolate import griddata
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use("Agg")  # 非交互式后端, 用于服务器/批处理生成图片
 import matplotlib.pyplot as plt
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -17,7 +17,7 @@ from kalman_gravity import KalmanGravityReconstructor, KalmanBathymetryInverter
 from utils import (compute_metrics, print_metrics, plot_gravity_field,
                    plot_bathymetry, plot_residual, plot_scatter_compare,
                    plot_error_histogram, interpolate_nans, bandpass_filter, compute_vgg,
-                   split_shipborne_mask)
+                   split_shipborne_mask, read_gmt_grd)
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 OUTPUT_DIR = Path(__file__).parent.parent / "output_real"
@@ -89,90 +89,6 @@ def load_gebco_region(lon_range, lat_range):
     return bathy, lon_b, lat_b
 
 
-def _read_gmt_grd(filepath):
-    """读取 .grd/.grd.gz 文件（NetCDF3 或 GMT 二进制），返回数据+经纬度。"""
-    spath = str(filepath)
-    tmp = tempfile.NamedTemporaryFile(suffix=".grd", delete=False,
-                                      prefix=f"grd_{os.getpid()}_{hash(spath) & 0x7FFFFFFF}_")
-    tmppath = tmp.name
-    try:
-        if spath.endswith(".gz"):
-            tmp.write(gzip.open(spath, "rb").read())
-        else:
-            tmp.write(open(spath, "rb").read())
-        tmp.close()
-
-        ds = nc.Dataset(tmppath, "r")
-        var_names = [v for v in ds.variables if len(ds[v].dimensions) >= 2]
-        if var_names:
-            vname = var_names[0]
-            v = ds.variables[vname]
-            data = v[:].copy()
-            lon = ds.variables["lon"][:].copy() if "lon" in ds.variables else None
-            lat = ds.variables["lat"][:].copy() if "lat" in ds.variables else None
-            if lon is None:
-                lon = ds.variables.get("longitude", ds.variables.get("x"))
-                lon = lon[:].copy() if lon is not None else None
-            if lat is None:
-                lat = ds.variables.get("latitude", ds.variables.get("y"))
-                lat = lat[:].copy() if lat is not None else None
-            ds.close()
-            if lon is None or lat is None:
-                raise ValueError(f"Cannot determine lon/lat coordinates in {spath}")
-            for _ in range(5):
-                try:
-                    os.unlink(tmppath)
-                    break
-                except OSError:
-                    time.sleep(0.1)
-            return np.squeeze(data), np.squeeze(lon), np.squeeze(lat)
-        ds.close()
-
-        with open(tmppath, "rb") as f:
-            hdr = f.read(892).decode("latin-1", errors="ignore")
-            m = (re.search(r"n_columns\s*=\s*(\d+)", hdr)
-                 or re.search(r"ncols\s*=\s*(\d+)", hdr, re.IGNORECASE))
-            if m is None:
-                raise ValueError(f"Cannot parse grid dimensions from {spath}")
-            nx = int(m.group(1))
-            m = (re.search(r"n_rows\s*=\s*(\d+)", hdr)
-                 or re.search(r"nrows\s*=\s*(\d+)", hdr, re.IGNORECASE))
-            if m is None:
-                raise ValueError(f"Cannot parse grid dimensions from {spath}")
-            ny = int(m.group(1))
-            m = (re.search(r"x_min\s*=\s*([\-\d.]+)", hdr)
-                 or re.search(r"xmin\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE))
-            if m is None:
-                raise ValueError(f"Cannot parse x bounds from {spath}")
-            xmin = float(m.group(1))
-            m = (re.search(r"x_max\s*=\s*([\-\d.]+)", hdr)
-                 or re.search(r"xmax\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE))
-            if m is None:
-                raise ValueError(f"Cannot parse x bounds from {spath}")
-            xmax = float(m.group(1))
-            m = (re.search(r"y_min\s*=\s*([\-\d.]+)", hdr)
-                 or re.search(r"ymin\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE))
-            if m is None:
-                raise ValueError(f"Cannot parse y bounds from {spath}")
-            ymin = float(m.group(1))
-            m = (re.search(r"y_max\s*=\s*([\-\d.]+)", hdr)
-                 or re.search(r"ymax\s*=\s*([\-\d.]+)", hdr, re.IGNORECASE))
-            if m is None:
-                raise ValueError(f"Cannot parse y bounds from {spath}")
-            ymax = float(m.group(1))
-            data = np.frombuffer(f.read(nx * ny * 4), dtype=np.float32).reshape(ny, nx)
-        os.unlink(tmppath)
-        return data, np.linspace(xmin, xmax, nx), np.linspace(ymin, ymax, ny)
-    finally:
-        for _ in range(10):
-            try:
-                if os.path.exists(tmppath):
-                    os.unlink(tmppath)
-                break
-            except OSError:
-                time.sleep(0.05)
-
-
 def load_shipborne_gravity(lon_grid, lat_grid):
     """加载全部船载重力格网，格网化匹配目标经纬度。"""
     ship_dir = DATA_DIR / "shipborne"
@@ -193,7 +109,7 @@ def load_shipborne_gravity(lon_grid, lat_grid):
                 continue
 
             try:
-                data, lon, lat = _read_gmt_grd(str(f))
+                data, lon, lat = read_gmt_grd(str(f))
                 if data is None:
                     continue
 

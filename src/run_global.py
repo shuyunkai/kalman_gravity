@@ -13,7 +13,7 @@ matplotlib.use("Agg")
 sys.path.insert(0, str(Path(__file__).parent))
 
 from kalman_gravity import KalmanGravityReconstructor, KalmanBathymetryInverter
-from utils import compute_metrics, compute_vgg, split_shipborne_mask
+from utils import compute_metrics, compute_vgg, split_shipborne_mask, read_gmt_grd
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 OUTPUT_DIR = Path(__file__).parent.parent / "output_global"
@@ -58,33 +58,7 @@ def load_shipborne_all():
                 continue
 
             try:
-                tmp = tempfile.NamedTemporaryFile(
-                    suffix=".grd", delete=False,
-                    prefix=f"grd_{os.getpid()}_")
-                if str(f).endswith(".gz"):
-                    tmp.write(gzip.open(str(f), "rb").read())
-                else:
-                    tmp.write(open(str(f), "rb").read())
-                tmp.close()
-
-                ds = nc.Dataset(tmp.name, "r")
-                vname = [v for v in ds.variables if len(ds[v].dimensions) >= 2][0]
-                data = ds.variables[vname][:].copy()
-                for coord_name in ["lon", "x", "longitude"]:
-                    if coord_name in ds.variables:
-                        lon = ds.variables[coord_name][:].copy()
-                        break
-                else:
-                    raise KeyError("No longitude coordinate found")
-                for coord_name in ["lat", "y", "latitude"]:
-                    if coord_name in ds.variables:
-                        lat = ds.variables[coord_name][:].copy()
-                        break
-                else:
-                    raise KeyError("No latitude coordinate found")
-                ds.close()
-                os.unlink(tmp.name)
-
+                data, lon, lat = read_gmt_grd(str(f))
                 lon2d, lat2d = np.meshgrid(lon, lat)
                 valid = ~np.isnan(data) & (np.abs(data) < 5000)
                 if valid.sum() > 100:
@@ -308,7 +282,7 @@ def super_resolve_regions_with_shipborne(gravity_1min, lon_1min, lat_1min, upsca
         if not cruise_dir.is_dir() or cruise_dir.name.startswith("_"):
             continue
 
-        for f in cruise_dir.glob("*.grd.gz"):
+        for f in list(cruise_dir.glob("*.grd.gz")) + list(cruise_dir.glob("*.grd")):
             fname = f.name.lower()
             is_grav = any(kw in fname for kw in [
                 "faa", "free_air", "free-air", "_gravity", "residual",
@@ -317,29 +291,7 @@ def super_resolve_regions_with_shipborne(gravity_1min, lon_1min, lat_1min, upsca
                 continue
 
             try:
-                tmp = tempfile.NamedTemporaryFile(
-                    suffix=".grd", delete=False,
-                    prefix=f"grd_{os.getpid()}_")
-                tmp.write(gzip.open(str(f), "rb").read())
-                tmp.close()
-
-                ds = nc.Dataset(tmp.name, "r")
-                vname = [v for v in ds.variables if len(ds[v].dimensions) >= 2][0]
-                ship_data = ds.variables[vname][:].copy()
-                for coord_name in ["lon", "x", "longitude"]:
-                    if coord_name in ds.variables:
-                        ship_lon = ds.variables[coord_name][:].copy()
-                        break
-                else:
-                    raise KeyError("No longitude coordinate found")
-                for coord_name in ["lat", "y", "latitude"]:
-                    if coord_name in ds.variables:
-                        ship_lat = ds.variables[coord_name][:].copy()
-                        break
-                else:
-                    raise KeyError("No latitude coordinate found")
-                ds.close()
-                os.unlink(tmp.name)
+                ship_data, ship_lon, ship_lat = read_gmt_grd(str(f))
 
                 lon_min, lon_max = ship_lon.min(), ship_lon.max()
                 lat_min, lat_max = ship_lat.min(), ship_lat.max()

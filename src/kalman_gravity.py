@@ -6,6 +6,8 @@ import warnings
 from utils import sediment_gravity_correction as _sediment_gravity_correction
 
 warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*overflow.*")
+# NOTE: 抑制 Parker 正演 exp(-k*d) 在大 k 时的 overflow 警告.
+# exp(-k*d) 在 kernel_inv 中被 exp(min(k*d,50)) 截断, 溢出不影响结果.
 
 
 class KalmanGravityReconstructor:
@@ -625,8 +627,6 @@ class KalmanBathymetryInverter:
 
         self.x = x0.ravel()
         self.P_diag = np.full(self.n_state, process_noise_std ** 2)
-        self.k = np.sqrt(self.kx_grid ** 2 + self.ky_grid ** 2)
-        self.k[0, 0] = 1e-10
         self._initialized = True
 
         print(f"Bathymetry inverter: d_ref={self.d:.0f} m, drho={self.drho:.0f} kg/m^3, "
