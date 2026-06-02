@@ -265,6 +265,27 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
               f"{np.std(grav_kf_mid[ship_val_mask])/np.std(gravity_hr[ship_val_mask]):.3f}")
 
     print("\n[5/6] Kalman Filter Bathymetry Inversion...")
+
+    # --- VGG validation (Plan A) ---
+    if vgg_lr is not None:
+        from utils import compute_vgg
+        vgg_kf = compute_vgg(gravity_hr, (lon_range[1] - lon_range[0]) / nx_hr,
+                             lat_center=(lat_range[0] + lat_range[1]) / 2.0)
+        vgg_lr_up = sp_zoom(vgg_lr, (upscale, upscale), order=1)
+        m_vgg = compute_metrics(vgg_kf, vgg_lr_up)
+        print(f"\n  [VGG Validation]")
+        print(f"  VGG RMSE: {m_vgg.get('RMSE', float('nan')):.2f} Eötvös  |  "
+              f"Corr: {m_vgg.get('Correlation', float('nan')):.3f}  |  "
+              f"Bias: {m_vgg.get('Bias', float('nan')):.2f} Eötvös")
+        # Report high-frequency difference specifically
+        vgg_diff = vgg_kf - vgg_lr_up
+        print(f"  VGG diff std: {np.nanstd(vgg_diff):.2f} Eötvös  "
+              f"(large → KF needs VGG constraint)")
+        if ship_val_mask is not None and ship_val_mask.sum() > 100:
+            ratio = np.nanstd(vgg_diff[ship_val_mask]) / np.nanstd(vgg_lr_up[ship_val_mask])
+            print(f"  VGG diff/signal ratio (ship val area): {ratio:.3f}  "
+                  f"({'HIGH — consider adding VGG constraint' if ratio > 0.5 else 'LOW — VGG constraint unnecessary'})")
+
     inverter = KalmanBathymetryInverter(
         grid_shape=(ny_hr, nx_hr), region_size_deg=lat_range[1] - lat_range[0],
         lat_center=(lat_range[0] + lat_range[1]) / 2.0)
