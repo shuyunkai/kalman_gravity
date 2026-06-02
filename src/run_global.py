@@ -13,7 +13,7 @@ matplotlib.use("Agg")
 sys.path.insert(0, str(Path(__file__).parent))
 
 from kalman_gravity import KalmanGravityReconstructor, KalmanBathymetryInverter
-from utils import compute_metrics, compute_vgg, split_shipborne_mask, read_gmt_grd
+from utils import compute_metrics, compute_vgg, split_shipborne_mask, read_gmt_grd, quality_control_shipborne
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 OUTPUT_DIR = Path(__file__).parent.parent / "output_global"
@@ -71,6 +71,8 @@ def load_shipborne_all():
     if all_points:
         all_pts = np.vstack(all_points)
         print(f"\nTotal shipborne points: {all_pts.shape[0]:,}")
+        all_pts, unit = quality_control_shipborne(all_pts)
+        print(f"  After QC: {all_pts.shape[0]:,} points (unit={unit})")
         np.save(cache_file, np.asarray(all_pts, dtype=np.float32))
         print(f"  Cached to {cache_file}")
         return all_pts

@@ -176,8 +176,10 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     print(f"  Region: lon=[{lon_range[0]}, {lon_range[1]}], lat=[{lat_range[0]}, {lat_range[1]}]")
 
     print("\n[1/3] Loading SSV33.1 satellite data...")
-    gravity_lr, _, lon_lr, lat_lr = load_ssv_region(lon_range, lat_range, load_vgg=False)
+    gravity_lr, vgg_lr, lon_lr, lat_lr = load_ssv_region(lon_range, lat_range, load_vgg=True)
     print(f"  Gravity: {gravity_lr.shape}")
+    if vgg_lr is not None:
+        print(f"  VGG loaded: shape={vgg_lr.shape} (reserved for spectral validation)")
 
     print("\n[2/3] Loading GEBCO bathymetry...")
     bathy_gebco, lon_b, lat_b = load_gebco_region(lon_range, lat_range)
@@ -246,6 +248,21 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     print(f"  Done in {time.time()-t0:.0f}s")
 
     gravity_bilinear = zoom(gravity_lr, (upscale, upscale), order=1)
+
+    # Spectral validation: band-separated metrics
+    dx_km = (lat_range[1] - lat_range[0]) * 111.32 / ny_hr
+    grav_kf_long = bandpass_filter(gravity_hr, dx_km, lam_min=160)
+    grav_kf_mid = bandpass_filter(gravity_hr, dx_km, lam_min=20, lam_max=160)
+    grav_bi_long = bandpass_filter(gravity_bilinear, dx_km, lam_min=160)
+    grav_bi_mid = bandpass_filter(gravity_bilinear, dx_km, lam_min=20, lam_max=160)
+
+    print("\n[4b/6] Spectral band validation...")
+    print(f"  Long-wave (>160km) correlation KF vs bilinear: "
+          f"{np.corrcoef(grav_kf_long.ravel(), grav_bi_long.ravel())[0,1]:.4f}")
+    if ship_val_mask is not None and ship_val_mask.sum() > 100:
+        rmse_kf_mid = compute_metrics(grav_kf_mid, gravity_hr, mask=ship_val_mask)
+        print(f"  Mid-band (20-160km) energy fraction: "
+              f"{np.std(grav_kf_mid[ship_val_mask])/np.std(gravity_hr[ship_val_mask]):.3f}")
 
     print("\n[5/6] Kalman Filter Bathymetry Inversion...")
     inverter = KalmanBathymetryInverter(

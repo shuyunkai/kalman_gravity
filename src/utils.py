@@ -424,7 +424,13 @@ def read_gmt_grd(filepath):
             data = np.frombuffer(f.read(nx * ny * 4), dtype=np.float32).reshape(ny, nx)
         return data, np.linspace(xmin, xmax, nx), np.linspace(ymin, ymax, ny)
     finally:
-        os.unlink(tmppath)
+        for _ in range(10):
+            try:
+                if os.path.exists(tmppath):
+                    os.unlink(tmppath)
+                break
+            except OSError:
+                time.sleep(0.05)
 
 
 def plot_gravity_field(data_list, titles, save_path=None, figsize=(18, 5)):
