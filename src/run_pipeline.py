@@ -307,7 +307,16 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
                                             nx_hr / bathy_gebco.shape[1]), order=1)
     inverter.depth_min = max(-11000, np.nanmin(bathy_prior_hr) - 500)
     inverter.depth_max = min(1000, np.nanmax(bathy_prior_hr) + 500)
-    inverter.apply_flexural_isostasy(Te=10e3)
+
+    # Use data-driven Te from crustal age if available
+    try:
+        from real_data import load_age_grid
+        age_info = load_age_grid(region=(lon_range[0], lon_range[1],
+                                          lat_range[0], lat_range[1]))
+        inverter.apply_flexural_isostasy_from_age(age_info["age"])
+    except (FileNotFoundError, KeyError) as e:
+        print(f"  Age grid not available: {e} — using default Te=10 km")
+        inverter.apply_flexural_isostasy(Te=10e3)
 
     inverter.initialize(gravity_reconstructed=gravity_hr,
                         gravity_ship=ship_grav if n_ship > 0 else None,

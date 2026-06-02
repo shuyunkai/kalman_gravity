@@ -445,7 +445,13 @@ def fig6_bathymetry_inversion():
     inverter = KalmanBathymetryInverter(
         grid_shape=(ny_hr, nx_hr), region_size_deg=16,
         lat_center=(lat_range[0] + lat_range[1]) / 2.0)
-    inverter.apply_flexural_isostasy(Te=10e3)
+    try:
+        from real_data import load_age_grid
+        age_info = load_age_grid(region=(138, 152, 32, 48))
+        inverter.apply_flexural_isostasy_from_age(age_info["age"])
+    except (FileNotFoundError, KeyError) as e:
+        print(f"  Fig6 age grid not available: {e} — using default Te=10 km")
+        inverter.apply_flexural_isostasy(Te=10e3)
     inverter.initialize(gravity_reconstructed=grav_kf, bathymetry_prior=bathy_gebco_hr,
                         prior_mask=prior_mask_fig6,
                         process_noise_std=80.0, observation_noise_std=5.0)

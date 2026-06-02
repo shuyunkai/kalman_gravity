@@ -149,6 +149,32 @@ def interpolate_nans(data, method="nearest"):
     return data_filled
 
 
+def age_to_te(age_myr):
+    """洋壳年龄 (Ma) → 有效弹性厚度 Te (km).
+
+    基于冷却板模型的经验关系 (Watts & Burov 2003):
+      Te = 3.0 * sqrt(age)    for age < 40 Ma
+      Te linearly → 35 km     for 40 <= age < 80 Ma
+      Te ≈ 35 km              for age >= 80 Ma (热平衡)
+      陆地/无年龄区域 → NaN
+
+    Args:
+        age_myr: 2D array, 洋壳年龄 [Ma], 0=陆地
+
+    Returns:
+        te_km: 2D array, 有效弹性厚度 [km], NaN=陆地
+    """
+    te = np.full_like(age_myr, np.nan, dtype=np.float32)
+    young = (age_myr > 0) & (age_myr < 40)
+    trans = (age_myr >= 40) & (age_myr < 80)
+    mature = age_myr >= 80
+
+    te[young] = 3.0 * np.sqrt(age_myr[young])
+    te[trans] = 3.0 * np.sqrt(40) + (age_myr[trans] - 40) * (35.0 - 3.0 * np.sqrt(40)) / 40
+    te[mature] = 35.0
+    return te
+
+
 def split_shipborne_mask(shipborne_data, validation_fraction=0.2, seed=42):
     """将船载格网数据随机拆分为训练集和验证集掩码。
 

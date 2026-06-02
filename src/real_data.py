@@ -156,6 +156,50 @@ def tid_to_multibeam_mask(tid_data):
     return tid_data == 1
 
 
+def load_age_grid(filepath=None, region=None):
+    """加载 Seton et al. (2020) 现代洋壳年龄格网。
+
+    分辨率: 2 弧分 (5401x10801)
+    值: 0-340 Ma, 0=陆地/不确定
+
+    Returns dict with age (Ma), lon, lat.
+    """
+    if filepath is None:
+        candidates = (list(DATA_DIR.glob("**/Grids/**/age.*GeeK2007*2m*.nc")) +
+                      list(DATA_DIR.glob("**/Grids/**/age.*GTS2012*2m*.nc")))
+        if not candidates:
+            raise FileNotFoundError(
+                "洋壳年龄格网未找到。请从 https://zenodo.org/records/5341342 "
+                "下载 Grids.zip, 解压后放入 data/Grids/")
+        filepath = candidates[0]
+
+    print(f"Loading ocean crust age from: {filepath}")
+    ds = xr.open_dataset(str(filepath), engine="h5netcdf")
+
+    lon_name = "lon" if "lon" in ds.dims else "longitude"
+    lat_name = "lat" if "lat" in ds.dims else "latitude"
+    age_var = [v for v in ds.data_vars if len(ds[v].dims) >= 2][0]
+
+    if region is not None:
+        lon_min, lon_max, lat_min, lat_max = region
+        ds_lon = ds[lon_name].values
+        if lon_min < 0 and ds_lon.min() >= 0:
+            lon_min += 360
+            lon_max += 360
+        ds = ds.sel(**{lon_name: slice(lon_min, lon_max),
+                       lat_name: slice(lat_min, lat_max)})
+
+    age = ds[age_var].values.astype(np.float32)
+    lon = ds[lon_name].values
+    lat = ds[lat_name].values
+    ds.close()
+
+    ocean = age[age > 0]
+    print(f"  Age grid: shape={age.shape}, ocean mean={ocean.mean():.1f} Ma, "
+          f"max={ocean.max():.1f} Ma")
+    return {"age": age, "lon": lon, "lat": lat}
+
+
 def load_globsed(filepath=None, region=None):
     """加载 GlobSed v3 全球海洋沉积厚度格网 (Straume et al. 2019).
 

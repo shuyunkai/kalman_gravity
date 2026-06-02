@@ -462,6 +462,31 @@ class KalmanBathymetryInverter:
         self.flexural_phi = phi
         print(f"Flexural isostasy configured (Te={Te/1000:.0f} km)")
 
+    def apply_flexural_isostasy_from_age(self, age_grid, interp_order=1):
+        """从洋壳年龄格网自动计算 Te 并配置挠曲均衡。
+
+        使用冷却板模型: Te(km) = 3.0*sqrt(age) for age<40Ma, →35km for age>80Ma.
+        取区域中位数 Te 作为标量代表值 (空间域变 Te 需解双调和方程, 暂不实现).
+
+        Args:
+            age_grid: 2D array, 洋壳年龄 [Ma], 0=陆地
+            interp_order: 重采样到目标格网的插值阶数
+        """
+        from scipy.ndimage import zoom
+        from utils import age_to_te
+        sy = self.ny / age_grid.shape[0]
+        sx = self.nx / age_grid.shape[1]
+        age_resampled = zoom(np.nan_to_num(age_grid, nan=0),
+                             (sy, sx), order=interp_order)
+        te_km = age_to_te(age_resampled)
+        te_median = np.nanmedian(te_km)
+        if np.isnan(te_median) or te_median < 1:
+            te_median = 10.0
+            print(f"  Age grid has no valid ocean pixels — using default Te=10 km")
+        te_m = te_median * 1000  # km → m
+        self.apply_flexural_isostasy(Te=te_m)
+        print(f"  Data-driven Te: median={te_median:.1f} km from crustal age")
+
     def apply_sediment_correction(self, sediment_thickness, drho_sed=500,
                                    interp_order=1):
         """沉积重力校正：从观测重力中减去沉积层的重力效应。
