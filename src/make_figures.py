@@ -53,7 +53,9 @@ def fig1_global_gravity_map():
     lat_sub = lat[::ss]
     grav_ssv_sub = grav_ssv[::ss, ::ss]
     grav_kf_sub = grav_kf[::ss, ::ss]
-    diff = grav_kf_sub - grav_ssv_sub
+    # Mask land areas (NaN in SSV) — diff only meaningful over ocean
+    ocean_mask = ~np.isnan(grav_ssv_sub)
+    diff = np.where(ocean_mask, grav_kf_sub - grav_ssv_sub, np.nan)
 
     fig, axes = plt.subplots(3, 1, figsize=(18, 14))
     vmax = np.percentile(np.abs(grav_ssv_sub), 99)
@@ -327,14 +329,24 @@ def fig5_power_spectrum():
 
     ds_ssv = xr.open_dataset(str(grav_path), engine=NC_ENGINE)
     ds_kf = xr.open_dataset(str(kf_path), engine=NC_ENGINE)
-    ny, nx = ds_ssv.z.shape
     sample_size = 2048
-    i0 = max(0, (ny - sample_size) // 2)
-    j0 = max(0, (nx - sample_size) // 2)
-    grav_ssv = ds_ssv.z.values[i0:i0+sample_size, j0:j0+sample_size]
-    grav_kf = ds_kf.gravity_anomaly.values[i0:i0+sample_size, j0:j0+sample_size]
+
+    # Use each dataset's own shape for central window extraction
+    ny_s, nx_s = ds_ssv.z.shape
+    i0_s = max(0, (ny_s - sample_size) // 2)
+    j0_s = max(0, (nx_s - sample_size) // 2)
+    grav_ssv = ds_ssv.z.values[i0_s:i0_s+sample_size, j0_s:j0_s+sample_size]
     ds_ssv.close()
+
+    ny_k, nx_k = ds_kf.gravity_anomaly.shape
+    i0_k = max(0, (ny_k - sample_size) // 2)
+    j0_k = max(0, (nx_k - sample_size) // 2)
+    grav_kf = ds_kf.gravity_anomaly.values[i0_k:i0_k+sample_size, j0_k:j0_k+sample_size]
     ds_kf.close()
+
+    # Fill NaN (land) with 0 before FFT to avoid NaN PSD
+    grav_ssv = np.nan_to_num(grav_ssv, nan=0.0)
+    grav_kf = np.nan_to_num(grav_kf, nan=0.0)
 
     from numpy.fft import fft2, fftfreq
 
@@ -370,6 +382,16 @@ def fig5_power_spectrum():
     ax.set_title("径向功率谱: SSV33.1 vs 卡尔曼滤波")
     ax.legend()
     ax.grid(True, alpha=0.3)
+    # Annotate wavelength bands for geophysical interpretation
+    for wl_km, label, y_pos in [(160, '160 km', 0.95), (20, '20 km', 0.85)]:
+        k_val = 2 * np.pi / (wl_km / (111.32 / 60))  # wavenumber in cycles/arcmin
+        if k_val > ax.get_xlim()[0] and k_val < ax.get_xlim()[1]:
+            ax.axvline(k_val, color='gray', ls=':', lw=0.8, alpha=0.5)
+            ax.text(k_val * 1.1, ax.get_ylim()[1] * y_pos, wl_km,
+                    fontsize=8, color='gray', alpha=0.7)
+    # NOTE: For band-specific validation, add:
+    # TODO: compute band-separated PSD_ratio = PSD(KF)/PSD(SSV) and verify
+    #       signal enhancement in 20-160 km band without noise amplification
     plt.tight_layout()
     plt.savefig(OUTPUT_DIR / "fig5_power_spectrum.png", dpi=150, bbox_inches="tight")
     plt.close()

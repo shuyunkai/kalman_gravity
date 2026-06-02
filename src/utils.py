@@ -117,7 +117,12 @@ def compute_vgg(gravity, dx_deg, lat_center=0, lat=None):
 
 
 def bandpass_filter(data, dx_km, lam_min=None, lam_max=None):
-    """频域带通滤波：保留 lam_min~lam_max 波长范围的信号。"""
+    """频域带通滤波：保留 lam_min~lam_max 波长范围的信号。
+
+    NOTE: 此函数已实现但主流程尚未集成。预留用于:
+      - 超分辨率前后频谱对比 (验证 20-160km 波段增强)
+      - 频段分级的独立 RMSE 计算
+    """
     ny, nx = data.shape
     kx = 2 * np.pi * np.fft.fftfreq(nx, dx_km)
     ky = 2 * np.pi * np.fft.fftfreq(ny, dx_km)
@@ -282,6 +287,69 @@ def spatial_block_split(shipborne_data, n_blocks_row=4, n_blocks_col=4):
             if val_mask.sum() > 50:
                 block_masks.append((train_mask, val_mask))
     return block_masks
+
+
+def quality_control_shipborne(points, n_std=5):
+    """船载重力数据粗差剔除: 局部滑动窗口中位数 ± n_std*std。
+
+    对每个点, 取周围 0.5° 窗口内的所有点计算中位数和标准差,
+    剔除偏离超过 n_std 倍标准差的点。同时根据值域推断单位(mGal vs uGal)。
+
+    Args:
+        points: (N, 3) array [lon, lat, gravity]
+        n_std: 标准差倍数阈值
+
+    Returns:
+        (cleaned_points, unit_tag) — cleaned_points 是过滤后的数组,
+        unit_tag 为 'mGal' 或 'uGal' 或 'unknown'
+    """
+    N = len(points)
+    if N < 20:
+        return points, 'unknown'
+
+    # Unit detection: mGal values typically 10-500, uGal values 10000-500000
+    abs_vals = np.abs(points[:, 2])
+    median_abs = np.median(abs_vals)
+    if median_abs > 10000:
+        unit_tag = 'uGal'
+        points[:, 2] = points[:, 2] / 1000.0  # normalize to mGal
+    elif median_abs < 0.1:
+        unit_tag = 'm/s2'
+        points[:, 2] = points[:, 2] * 1e5  # normalize to mGal
+    else:
+        unit_tag = 'mGal'
+
+    # Sliding window outlier detection
+    from scipy.spatial import cKDTree
+    # Normalize coordinates for KDTree
+    cos_lat = np.cos(np.radians(np.median(points[:, 1])))
+    xy = points[:, :2].copy()
+    xy[:, 0] *= 111.32 * cos_lat
+    xy[:, 1] *= 111.32
+    tree = cKDTree(xy)
+
+    keep = np.ones(N, dtype=bool)
+    window_km = 55.0  # ~0.5° at equator
+
+    for i in range(N):
+        if not keep[i]:
+            continue
+        idx = tree.query_ball_point(xy[i], window_km)
+        if len(idx) < 10:
+            continue
+        local_vals = points[idx, 2]
+        local_median = np.median(local_vals)
+        local_std = np.std(local_vals)
+        if local_std < 1e-6:
+            continue
+        if abs(points[i, 2] - local_median) > n_std * local_std:
+            keep[i] = False
+
+    n_removed = N - keep.sum()
+    if n_removed > 0:
+        print(f"  QC: removed {n_removed}/{N} outliers ({n_removed/N*100:.1f}%), "
+              f"unit={unit_tag}")
+    return points[keep], unit_tag
 
 
 def read_gmt_grd(filepath):

@@ -145,9 +145,14 @@ def create_global_gravity_model(tile_size_lat=10):
                                          (lon_m, lat_m), method="nearest")
 
             # Tile with shipborne data: full KF. Without: adaptive smoothing.
+            # NOTE: Two paths create potential tile-boundary discontinuities.
+            # TODO: Add overlap zones or unify to single KF path for all tiles.
             if ship_tile is not None:
-                # Use original SSV 1' as satellite observation (1:1 mapping)
-                # — no self-downsampling, no circularity
+                # 1:1 satellite mapping (lr_grid_shape = tile_shape):
+                # At 1' global scale, SSV IS the native resolution. No real
+                # coarser observation exists without self-downsampling (circular).
+                # True multi-resolution KF would need an independent coarser
+                # gravity field (e.g., a degree-180 spherical harmonic model).
                 reconstructor = KalmanGravityReconstructor(
                     grid_shape=(tile_ny, tile_nx), region_size_deg=tile_size_lat,
                     lr_grid_shape=(tile_ny, tile_nx))

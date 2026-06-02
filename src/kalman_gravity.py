@@ -397,10 +397,16 @@ class EnsembleKalmanGravityReconstructor:
 
 
 class KalmanBathymetryInverter:
-    """卡尔曼滤波水深反演：从重建的重力异常通过 Parker 频域公式反演海底地形。
+    """正则化迭代水深反演：从重建的重力异常通过 Parker 频域公式反演海底地形。
 
     观测模型: F[g](k) = 2πGΔρ·e^{-kd}·F[b](k)，含 Tikhonov 正则化和
     岩石圈挠曲均衡校正。
+
+    NAMING NOTE: 类名含 "Kalman" 但实际算法更接近正则化迭代反演:
+      - predict(): 空间高斯平滑 + 协方差膨胀 (启发式先验)
+      - update_gravity(): Parker 正演残差驱动的自适应梯度下降
+    没有严格的 KF 状态转移模型和观测线性化, 协方差传播也是近似的。
+    保留此命名是因为整体框架(预测-更新循环)与 KF 结构相似。
     """
 
     def __init__(self, grid_shape, region_size_deg, lat_center=0):
@@ -549,7 +555,8 @@ class KalmanBathymetryInverter:
         drho = median(|g|/|b|) / (2πG)·1e-5，d_ref = median(|b|)。
         """
         mask = ~(np.isnan(gravity_ship) | np.isnan(bathy_ship))
-        if mask.sum() < 10:
+        n_pts = mask.sum()
+        if n_pts < 3:
             return
         g_s = gravity_ship[mask]
         b_s = bathy_ship[mask]
@@ -563,8 +570,9 @@ class KalmanBathymetryInverter:
         d_est = max(500, min(6000, d_est))
         self.d = d_est
 
+        tag = f" (n={n_pts})" if n_pts < 10 else f" (n={n_pts}, robust)"
         print(f"  Calibrated drho={self.drho:.0f} kg/m^3, d_ref={self.d:.0f} m "
-              f"from {mask.sum()} control points")
+              f"from {n_pts} control points{tag}")
 
     def initialize(self, gravity_reconstructed, gravity_ship=None, bathy_ship=None,
                    bathymetry_prior=None, process_noise_std=50.0,

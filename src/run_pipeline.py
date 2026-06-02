@@ -17,7 +17,7 @@ from kalman_gravity import KalmanGravityReconstructor, KalmanBathymetryInverter
 from utils import (compute_metrics, print_metrics, plot_gravity_field,
                    plot_bathymetry, plot_residual, plot_scatter_compare,
                    plot_error_histogram, interpolate_nans, bandpass_filter, compute_vgg,
-                   split_shipborne_mask, read_gmt_grd)
+                   split_shipborne_mask, read_gmt_grd, quality_control_shipborne)
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 OUTPUT_DIR = Path(__file__).parent.parent / "output_real"
@@ -25,18 +25,21 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 NC_ENGINE = "h5netcdf"
 
 
-def load_ssv_region(lon_range, lat_range):
-    """加载指定区域的 SSV33.1 重力异常和 VGG。处理 0-360 → -180-180 经度转换。"""
+def load_ssv_region(lon_range, lat_range, load_vgg=False):
+    """加载指定区域的 SSV33.1 重力异常 (和可选的 VGG)。
+
+    load_vgg=False 时只读 grav_33.1.nc, 节省 ~640MB IO。
+    """
     grav_path = DATA_DIR / "ssv32" / "grav_33.1.nc"
-    curv_path = DATA_DIR / "ssv32" / "curv_33.1.nc"
 
     ds_g = xr.open_dataset(str(grav_path), engine=NC_ENGINE)
-    ds_c = xr.open_dataset(str(curv_path), engine=NC_ENGINE)
+    if load_vgg:
+        curv_path = DATA_DIR / "ssv32" / "curv_33.1.nc"
+        ds_c = xr.open_dataset(str(curv_path), engine=NC_ENGINE)
 
     lat_slice = slice(lat_range[0], lat_range[1])
     ds_lon = ds_g.lon.values
 
-    # Determine if dataset uses 0-360 or -180-180
     if ds_lon.max() > 180:
         lon0 = (lon_range[0] + 360) % 360
         lon1 = (lon_range[1] + 360) % 360
@@ -45,24 +48,27 @@ def load_ssv_region(lon_range, lat_range):
 
     if lon0 < lon1:
         gravity = ds_g.z.sel(lon=slice(lon0, lon1), lat=lat_slice).values
-        vgg = ds_c.z.sel(lon=slice(lon0, lon1), lat=lat_slice).values
+        if load_vgg:
+            vgg = ds_c.z.sel(lon=slice(lon0, lon1), lat=lat_slice).values
         lon = ds_g.lon.sel(lon=slice(lon0, lon1)).values
     else:
         lmax = 360 if ds_lon.max() > 180 else 180
         g1 = ds_g.z.sel(lon=slice(lon0, lmax), lat=lat_slice).values
         g2 = ds_g.z.sel(lon=slice(-lmax, lon1), lat=lat_slice).values
         gravity = np.concatenate([g1, g2], axis=1)
-        v1 = ds_c.z.sel(lon=slice(lon0, lmax), lat=lat_slice).values
-        v2 = ds_c.z.sel(lon=slice(-lmax, lon1), lat=lat_slice).values
-        vgg = np.concatenate([v1, v2], axis=1)
+        if load_vgg:
+            v1 = ds_c.z.sel(lon=slice(lon0, lmax), lat=lat_slice).values
+            v2 = ds_c.z.sel(lon=slice(-lmax, lon1), lat=lat_slice).values
+            vgg = np.concatenate([v1, v2], axis=1)
         l1 = ds_g.lon.sel(lon=slice(lon0, lmax)).values
         l2 = ds_g.lon.sel(lon=slice(-lmax, lon1)).values
         lon = np.sort(np.concatenate([l1, l2]))
 
     lat = ds_g.lat.sel(lat=lat_slice).values
     ds_g.close()
-    ds_c.close()
-    return gravity, vgg, lon, lat
+    if load_vgg:
+        ds_c.close()
+    return (gravity, vgg, lon, lat) if load_vgg else (gravity, None, lon, lat)
 
 
 def load_gebco_region(lon_range, lat_range):
@@ -153,6 +159,7 @@ def load_shipborne_gravity(lon_grid, lat_grid):
 
     if gravity_points:
         pts = np.vstack(gravity_points)
+        pts, unit = quality_control_shipborne(pts)
         ship_grav = griddata(pts[:, :2], pts[:, 2], (lon_mesh, lat_mesh), method="nearest")
     if bathy_points:
         pts = np.vstack(bathy_points)
@@ -169,7 +176,7 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     print(f"  Region: lon=[{lon_range[0]}, {lon_range[1]}], lat=[{lat_range[0]}, {lat_range[1]}]")
 
     print("\n[1/3] Loading SSV33.1 satellite data...")
-    gravity_lr, _, lon_lr, lat_lr = load_ssv_region(lon_range, lat_range)
+    gravity_lr, _, lon_lr, lat_lr = load_ssv_region(lon_range, lat_range, load_vgg=False)
     print(f"  Gravity: {gravity_lr.shape}")
 
     print("\n[2/3] Loading GEBCO bathymetry...")
@@ -290,7 +297,7 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     else:
         m_b_kf = compute_metrics(bathymetry_kf, bathy_truth_hr)
         m_b_trad = compute_metrics(bathymetry_trad, bathy_truth_hr)
-        val_tag = "[所有 GEBCO 像素]"
+        val_tag = "[所有 GEBCO 像素 — WARNING: 先验和验证同源, 结果非独立!]"
 
     # Gravity validation on held-out shipborne
     if ship_val_mask is not None and ship_val_mask.sum() > 100:
