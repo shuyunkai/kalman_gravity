@@ -196,10 +196,32 @@ def _load_japan_data(upscale=4):
     lon_hr_2d, lat_hr_2d = np.meshgrid(lon_hr, lat_hr)
     ship_hr = griddata(pts[:, :2], pts[:, 2], (lon_hr_2d, lat_hr_2d), method="nearest")
 
-    # Convert residual gravity → free-air: add back SSV long-wave trend (>160km)
+    # Convert residual gravity → free-air with EGM2008 long-wave trend (>160km)
     from scipy.ndimage import gaussian_filter
-    ssv_trend = gaussian_filter(grav_lr, sigma=10)  # ~160km smoothing
-    grav_lr_up = zoom(ssv_trend, (upscale, upscale), order=1)
+    try:
+        ds_egm = xr.open_dataset(
+            DATA_DIR / "icgem" / "grid" / "EGM2008_gravity_anomaly.nc",
+            engine=NC_ENGINE)
+        vname = [v for v in ds_egm.variables if len(ds_egm[v].dims) >= 2][0]
+        grav_egm = ds_egm[vname].sel(
+            lon=slice(138, 152),
+            lat=slice(48, 32)).values  # EGM2008 lat descending
+        ds_egm.close()
+        egm_trend = gaussian_filter(grav_egm, sigma=10)
+        from scipy.interpolate import RegularGridInterpolator
+        xi_e = np.linspace(138, 152, egm_trend.shape[1])
+        yi_e = np.linspace(48, 32, egm_trend.shape[0])
+        interp = RegularGridInterpolator(
+            (yi_e, xi_e), egm_trend, bounds_error=False, fill_value=np.nan)
+        lr_lon = np.linspace(138, 152, grav_lr.shape[1])
+        lr_lat = np.linspace(32, 48, grav_lr.shape[0])
+        lo2d, la2d = np.meshgrid(lr_lon, lr_lat)
+        egm_on_lr = interp(np.column_stack([la2d.ravel(), lo2d.ravel()]))
+        egm_on_lr = egm_on_lr.reshape(grav_lr.shape)
+        grav_lr_up = zoom(egm_on_lr, (upscale, upscale), order=1)
+    except Exception:
+        ssv_trend = gaussian_filter(grav_lr, sigma=10)
+        grav_lr_up = zoom(ssv_trend, (upscale, upscale), order=1)
     ship_mask = ~np.isnan(ship_hr)
     if ship_mask.sum() > 0:
         ship_hr[ship_mask] = ship_hr[ship_mask] + grav_lr_up[ship_mask]

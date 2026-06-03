@@ -192,16 +192,40 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     lon_hr = np.linspace(lon_range[0], lon_range[1], nx_hr)
     lat_hr = np.linspace(lat_range[0], lat_range[1], ny_hr)
     ship_grav, ship_bathy = load_shipborne_gravity(lon_hr, lat_hr)
-    # Convert residual gravity → free-air: add back SSV long-wave trend (>160km)
+    # Convert residual gravity → free-air with EGM2008 long-wave trend (>160km)
+    # EGM2008 is an independent spherical harmonic model — using it avoids
+    # SSV's own processing artifacts in the trend restoration.
     if ship_grav is not None:
         ship_mask = ~np.isnan(ship_grav)
         if ship_mask.sum() > 0:
             before_mean = np.nanmean(ship_grav[ship_mask])
-            ssv_trend = gaussian_filter(gravity_lr, sigma=10)
-            grav_lr_up = sp_zoom(ssv_trend, (upscale, upscale), order=1)
+            try:
+                ds_egm = xr.open_dataset(
+                    DATA_DIR / "icgem" / "grid" / "EGM2008_gravity_anomaly.nc",
+                    engine=NC_ENGINE)
+                vname = [v for v in ds_egm.variables if len(ds_egm[v].dims) >= 2][0]
+                grav_egm = ds_egm[vname].sel(
+                    lon=slice(lon_range[0], lon_range[1]),
+                    lat=slice(lat_range[1], lat_range[0])).values  # EGM2008 lat descending
+                ds_egm.close()
+                egm_trend = gaussian_filter(grav_egm, sigma=10)
+                # Interpolate EGM trend to LR grid then zoom to HR
+                from scipy.interpolate import RegularGridInterpolator
+                xi_egm = np.linspace(lon_range[0], lon_range[1], egm_trend.shape[1])
+                yi_egm = np.linspace(lat_range[1], lat_range[0], egm_trend.shape[0])
+                interp = RegularGridInterpolator(
+                    (yi_egm, xi_egm), egm_trend, bounds_error=False, fill_value=np.nan)
+                lon_lr2d, lat_lr2d = np.meshgrid(lon_lr, lat_lr)
+                egm_on_lr = interp(np.column_stack([lat_lr2d.ravel(), lon_lr2d.ravel()]))
+                egm_on_lr = egm_on_lr.reshape(gravity_lr.shape)
+                grav_lr_up = sp_zoom(egm_on_lr, (upscale, upscale), order=1)
+            except Exception as e:
+                print(f"  EGM2008 unavailable ({e}), falling back to SSV trend")
+                ssv_trend = gaussian_filter(gravity_lr, sigma=10)
+                grav_lr_up = sp_zoom(ssv_trend, (upscale, upscale), order=1)
             ship_grav[ship_mask] = ship_grav[ship_mask] + grav_lr_up[ship_mask]
             after_mean = np.nanmean(ship_grav[ship_mask])
-            print(f"  Residual→FAA conversion: mean {before_mean:.0f} → {after_mean:.0f} mGal "
+            print(f"  Residual→FAA (EGM2008 trend): mean {before_mean:.0f} → {after_mean:.0f} mGal "
                   f"(trend added: {np.nanmean(grav_lr_up[ship_mask]):.0f} mGal)")
     n_ship = np.sum(~np.isnan(ship_grav)) if ship_grav is not None else 0
     print(f"  Shipborne gravity points: {n_ship}")
