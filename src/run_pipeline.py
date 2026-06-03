@@ -196,9 +196,13 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     if ship_grav is not None:
         ship_mask = ~np.isnan(ship_grav)
         if ship_mask.sum() > 0:
-            ssv_trend = gaussian_filter(gravity_lr, sigma=10)  # ~160km smoothing
+            before_mean = np.nanmean(ship_grav[ship_mask])
+            ssv_trend = gaussian_filter(gravity_lr, sigma=10)
             grav_lr_up = sp_zoom(ssv_trend, (upscale, upscale), order=1)
             ship_grav[ship_mask] = ship_grav[ship_mask] + grav_lr_up[ship_mask]
+            after_mean = np.nanmean(ship_grav[ship_mask])
+            print(f"  Residual→FAA conversion: mean {before_mean:.0f} → {after_mean:.0f} mGal "
+                  f"(trend added: {np.nanmean(grav_lr_up[ship_mask]):.0f} mGal)")
     n_ship = np.sum(~np.isnan(ship_grav)) if ship_grav is not None else 0
     print(f"  Shipborne gravity points: {n_ship}")
 
