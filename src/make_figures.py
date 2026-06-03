@@ -196,8 +196,10 @@ def _load_japan_data(upscale=4):
     lon_hr_2d, lat_hr_2d = np.meshgrid(lon_hr, lat_hr)
     ship_hr = griddata(pts[:, :2], pts[:, 2], (lon_hr_2d, lat_hr_2d), method="nearest")
 
-    # Convert residual gravity → free-air: add back SSV regional trend
-    grav_lr_up = zoom(grav_lr, (upscale, upscale), order=1)
+    # Convert residual gravity → free-air: add back SSV long-wave trend (>160km)
+    from scipy.ndimage import gaussian_filter
+    ssv_trend = gaussian_filter(grav_lr, sigma=10)  # ~160km smoothing
+    grav_lr_up = zoom(ssv_trend, (upscale, upscale), order=1)
     ship_mask = ~np.isnan(ship_hr)
     if ship_mask.sum() > 0:
         ship_hr[ship_mask] = ship_hr[ship_mask] + grav_lr_up[ship_mask]

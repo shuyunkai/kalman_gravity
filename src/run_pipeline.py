@@ -192,11 +192,12 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     lon_hr = np.linspace(lon_range[0], lon_range[1], nx_hr)
     lat_hr = np.linspace(lat_range[0], lat_range[1], ny_hr)
     ship_grav, ship_bathy = load_shipborne_gravity(lon_hr, lat_hr)
-    # Convert residual gravity → free-air: add back SSV regional trend
+    # Convert residual gravity → free-air: add back SSV long-wave trend (>160km)
     if ship_grav is not None:
         ship_mask = ~np.isnan(ship_grav)
         if ship_mask.sum() > 0:
-            grav_lr_up = sp_zoom(gravity_lr, (upscale, upscale), order=1)
+            ssv_trend = gaussian_filter(gravity_lr, sigma=10)  # ~160km smoothing
+            grav_lr_up = sp_zoom(ssv_trend, (upscale, upscale), order=1)
             ship_grav[ship_mask] = ship_grav[ship_mask] + grav_lr_up[ship_mask]
     n_ship = np.sum(~np.isnan(ship_grav)) if ship_grav is not None else 0
     print(f"  Shipborne gravity points: {n_ship}")
