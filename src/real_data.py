@@ -105,11 +105,11 @@ def load_gebco(filepath=None, region=None):
 def load_gebco_tid(filepath=None, region=None):
     """加载 GEBCO TID (Type Identifier) 类型标识格网。
 
-    TID 值含义:
-      0 = 陆地
-      1 = 实测多波束/单波束 → 独立测量，可用于约束
-      2 = 卫星重力反演填充 → 循环推导，绝对不能用于约束
-      3+ = 插值/预生成格网 → 循环推导
+    TID 值含义 (GEBCO 编码):
+      0     = 陆地
+      10-17 = 实测多波束/单波束 → 独立测量，可用于约束
+      40-48 = 卫星重力反演填充 → 循环推导，绝对不能用于约束
+      70-72 = 插值/预生成格网 → 循环推导
 
     Returns dict with tid, lon, lat.
     """
@@ -150,15 +150,23 @@ def load_gebco_tid(filepath=None, region=None):
     lat_t = ds[lat_name].values
     ds.close()
 
-    n_measured = (tid == 1).sum()
-    n_inverted = (tid == 2).sum()
-    print(f"  TID: shape={tid.shape}, measured={n_measured:,}, inverted={n_inverted:,}")
+    n_measured = ((tid >= 10) & (tid < 20)).sum()
+    n_inverted = ((tid >= 40) & (tid < 50)).sum()
+    print(f"  TID: shape={tid.shape}, measured(TID10-17)={n_measured:,}, "
+          f"inverted(TID40-48)={n_inverted:,}")
     return {"tid": tid, "lon": lon_t, "lat": lat_t}
 
 
 def tid_to_multibeam_mask(tid_data):
-    """将 TID 格网转换为布尔掩码: TID==1 (实测多波束) 为 True。"""
-    return tid_data == 1
+    """将 TID 格网转换为布尔掩码: 实测多波束区域为 True。
+
+    GEBCO TID 编码:
+      0     = 陆地
+      10-17 = 实测 (多波束/单波束/等深线/Olex/数字海图等)
+      40-48 = 卫星重力反演填充 (GRIDDED/SID/深度预测)
+      70-72 = 预生成/插值格网
+    """
+    return (tid_data >= 10) & (tid_data < 20)
 
 
 def load_age_grid(filepath=None, region=None):
