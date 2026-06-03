@@ -210,7 +210,7 @@ def _load_japan_data(upscale=4):
     recon.initialize(gravity_lr=grav_lr, gravity_ship=ship_hr,
                      ship_train_mask=ship_train_mask,
                      process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
-    grav_kf = recon.run(n_iterations=6, smooth_sigma=0.8)
+    grav_kf = recon.run(n_iterations=6, smooth_sigma=3.0)
     grav_bi = zoom(grav_lr, (upscale, upscale), order=1)
 
     result = (grav_lr, grav_kf, grav_bi, ship_hr, ship_lon, ship_lat, lon_hr, lat_hr,
