@@ -369,7 +369,11 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     print("=" * 60)
     print(f"  Gravity KF mean/std: {gravity_hr.mean():.1f} / {gravity_hr.std():.1f} mGal")
     if m_g_ship_val:
-        print(f"  Gravity KF vs Ship (验证) RMSE: {m_g_ship_val['RMSE']:.1f} mGal "
+        m_bi_ship_val = compute_metrics(gravity_bilinear, ship_grav, mask=ship_val_mask)
+        impr = (1 - m_g_ship_val['RMSE'] / m_bi_ship_val['RMSE']) * 100 if m_bi_ship_val.get('RMSE', 0) > 0 else 0
+        print(f"  Gravity KF vs Ship (验证) RMSE: {m_g_ship_val['RMSE']:.1f} mGal  "
+              f"| Bilinear vs Ship: {m_bi_ship_val.get('RMSE', float('nan')):.1f} mGal  "
+              f"| KF改善: {impr:.0f}%  "
               f"[n={m_g_ship_val.get('N', '?')}]")
     print(f"  Bathymetry KF mean: {bathymetry_kf.mean():.0f} m")
     print(f"  Bathymetry RMSE {val_tag}: {m_b_kf['RMSE']:.0f} m (KF) vs {m_b_trad['RMSE']:.0f} m (Parker)")
