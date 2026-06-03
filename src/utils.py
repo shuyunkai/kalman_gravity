@@ -303,6 +303,8 @@ def quality_control_shipborne(points, n_std=5):
         (cleaned_points, unit_tag) — cleaned_points 是过滤后的数组,
         unit_tag 为 'mGal' 或 'uGal' 或 'unknown'
     """
+    # Convert to plain array (handle masked arrays from griddata)
+    points = np.asarray(points, dtype=np.float64)
     N = len(points)
     if N < 20:
         return points, 'unknown'

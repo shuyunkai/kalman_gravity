@@ -122,7 +122,12 @@ def load_gebco_tid(filepath=None, region=None):
         filepath = candidates[0]
 
     print(f"Loading GEBCO TID from: {filepath}")
-    ds = xr.open_dataset(str(filepath), engine="h5netcdf")
+    # TID file is large (3.5 GB) — try netcdf4 engine first, fall back to h5netcdf
+    try:
+        ds = xr.open_dataset(str(filepath), engine="netcdf4")
+    except Exception:
+        print("  netcdf4 engine failed, trying h5netcdf...")
+        ds = xr.open_dataset(str(filepath), engine="h5netcdf")
 
     lon_name = "lon" if "lon" in ds.dims else "longitude"
     lat_name = "lat" if "lat" in ds.dims else "latitude"
