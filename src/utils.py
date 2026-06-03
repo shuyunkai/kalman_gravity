@@ -80,13 +80,16 @@ def print_metrics(metrics, title="Metrics"):
     print(f"{'='*50}")
 
 
-def compute_vgg(gravity, dx_deg, lat_center=0, lat=None):
+def compute_vgg(gravity, dx_deg, lat_center=0, lat=None, dy_deg=None):
     """频域垂直重力梯度: VGG = dg/dz = F^{-1}[|k|*F[g]]。含纬度校正。
 
     可传入 lat 数组按行做纬度校正，或使用 lat_center 做全局近似。
+    dy_deg 默认等于 dx_deg, 非正方形格网时需单独指定。
     """
     ny, nx = gravity.shape
-    dy_m = dx_deg * 111320
+    if dy_deg is None:
+        dy_deg = dx_deg
+    dy_m = dy_deg * 111320
 
     if lat is not None and len(lat) == ny:
         cos_lat_2d = np.cos(np.radians(np.asarray(lat)))[:, None]
@@ -216,7 +219,7 @@ def split_shipborne_mask(shipborne_data, validation_fraction=0.2, seed=42):
             val_mask.reshape(shipborne_data.shape))
 
 
-def sediment_gravity_correction(sediment_thickness, drho_sed=500):
+def sediment_gravity_correction(sediment_thickness, drho_sed=470):
     """计算沉积层的重力效应 (无限板近似)。
 
     dg_sed = 2 * pi * G * drho_sed * thickness  [m/s^2]
@@ -227,7 +230,7 @@ def sediment_gravity_correction(sediment_thickness, drho_sed=500):
 
     Args:
         sediment_thickness: 2D array, 沉积厚度 [m]
-        drho_sed: 沉积-地壳密度差绝对值 [kg/m^3], 默认 500
+        drho_sed: 沉积-地壳密度差绝对值 [kg/m^3], 默认 470
 
     Returns:
         dg_correction: 重力校正量 [mGal], 正值

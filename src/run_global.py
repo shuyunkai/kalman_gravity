@@ -73,6 +73,31 @@ def load_shipborne_all():
         print(f"\nTotal shipborne points: {all_pts.shape[0]:,}")
         all_pts, unit = quality_control_shipborne(all_pts)
         print(f"  After QC: {all_pts.shape[0]:,} points (unit={unit})")
+
+        # Residual→FAA conversion for Subduction_Bassett data (near-zero mean)
+        abs_mean = abs(np.mean(all_pts[:, 2]))
+        if abs_mean < 50:
+            print(f"  Residual gravity detected (mean={all_pts[:, 2].mean():.1f}), "
+                  f"adding EGM2008 trend...")
+            try:
+                ds_egm = xr.open_dataset(
+                    DATA_DIR / "icgem" / "grid" / "EGM2008_gravity_anomaly.nc",
+                    engine=NC_ENGINE)
+                vname = [v for v in ds_egm.variables if len(ds_egm[v].dims) >= 2][0]
+                grav_egm = ds_egm[vname].values
+                egm_lon = ds_egm.lon.values
+                egm_lat = ds_egm.lat.values[::-1]
+                grav_egm = grav_egm[::-1, :]
+                ds_egm.close()
+                from scipy.interpolate import RegularGridInterpolator
+                interp = RegularGridInterpolator(
+                    (egm_lat, egm_lon), gaussian_filter(grav_egm, sigma=10),
+                    bounds_error=False, fill_value=np.nan)
+                trend_at_pts = interp(all_pts[:, [1, 0]])
+                all_pts[:, 2] = all_pts[:, 2] + trend_at_pts
+                print(f"  Trend added: mean shift {trend_at_pts.mean():.0f} mGal")
+            except Exception as e:
+                print(f"  EGM2008 trend failed ({e}), using SSV")
         np.save(cache_file, np.asarray(all_pts, dtype=np.float32))
         print(f"  Cached to {cache_file}")
         return all_pts

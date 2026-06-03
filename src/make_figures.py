@@ -223,8 +223,11 @@ def _load_japan_data(upscale=4):
         ssv_trend = gaussian_filter(grav_lr, sigma=10)
         grav_lr_up = zoom(ssv_trend, (upscale, upscale), order=1)
     ship_mask = ~np.isnan(ship_hr)
-    if ship_mask.sum() > 0:
+    is_residual = abs(np.nanmean(ship_hr[ship_mask])) < 50
+    if ship_mask.sum() > 0 and is_residual:
         ship_hr[ship_mask] = ship_hr[ship_mask] + grav_lr_up[ship_mask]
+    elif ship_mask.sum() > 0:
+        print(f"  Shipborne data already FAA (mean={np.nanmean(ship_hr[ship_mask]):.0f}), skip trend")
 
     recon = KalmanGravityReconstructor(grid_shape=(ny_hr, nx_hr), region_size_deg=16,
                                         lr_grid_shape=(ny_lr, nx_lr))

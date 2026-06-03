@@ -123,6 +123,7 @@ class KalmanGravityReconstructor:
                 P_2d[i0:i1, j0:j1] = (1 - K) * P_block
 
         self.x = x_2d.ravel()
+        self.P_diag = P_2d.ravel()  # explicit: P_2d is a view, ensure P_diag updated
 
     def update_shipborne(self, max_points_per_update=5000, prop_radius=3, prop_fraction=0.3):
         """更新步-船载观测：逐点卡尔曼更新 + 高斯邻域传播。

@@ -192,13 +192,15 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     lon_hr = np.linspace(lon_range[0], lon_range[1], nx_hr)
     lat_hr = np.linspace(lat_range[0], lat_range[1], ny_hr)
     ship_grav, ship_bathy = load_shipborne_gravity(lon_hr, lat_hr)
-    # Convert residual gravity → free-air with EGM2008 long-wave trend (>160km)
+    # Convert residual gravity → free-air with EGM2008 long-wave trend (>160km).
+    # Only applied when all loaded files are residual type (not already FAA).
     # EGM2008 is an independent spherical harmonic model — using it avoids
     # SSV's own processing artifacts in the trend restoration.
     if ship_grav is not None:
         ship_mask = ~np.isnan(ship_grav)
-        if ship_mask.sum() > 0:
-            before_mean = np.nanmean(ship_grav[ship_mask])
+        before_mean = np.nanmean(ship_grav[ship_mask])
+        is_residual = abs(before_mean) < 50  # residual has near-zero mean
+        if ship_mask.sum() > 0 and is_residual:
             try:
                 ds_egm = xr.open_dataset(
                     DATA_DIR / "icgem" / "grid" / "EGM2008_gravity_anomaly.nc",
@@ -209,7 +211,6 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
                     lat=slice(lat_range[1], lat_range[0])).values  # EGM2008 lat descending
                 ds_egm.close()
                 egm_trend = gaussian_filter(grav_egm, sigma=10)
-                # Interpolate EGM trend to LR grid then zoom to HR
                 from scipy.interpolate import RegularGridInterpolator
                 xi_egm = np.linspace(lon_range[0], lon_range[1], egm_trend.shape[1])
                 yi_egm = np.linspace(lat_range[1], lat_range[0], egm_trend.shape[0])
@@ -227,6 +228,8 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
             after_mean = np.nanmean(ship_grav[ship_mask])
             print(f"  Residual→FAA (EGM2008 trend): mean {before_mean:.0f} → {after_mean:.0f} mGal "
                   f"(trend added: {np.nanmean(grav_lr_up[ship_mask]):.0f} mGal)")
+        elif ship_mask.sum() > 0:
+            print(f"  Shipborne data already FAA (mean={before_mean:.0f} mGal), skip trend recovery")
     n_ship = np.sum(~np.isnan(ship_grav)) if ship_grav is not None else 0
     print(f"  Shipborne gravity points: {n_ship}")
 
