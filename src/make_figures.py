@@ -196,6 +196,12 @@ def _load_japan_data(upscale=4):
     lon_hr_2d, lat_hr_2d = np.meshgrid(lon_hr, lat_hr)
     ship_hr = griddata(pts[:, :2], pts[:, 2], (lon_hr_2d, lat_hr_2d), method="nearest")
 
+    # Convert residual gravity → free-air: add back SSV regional trend
+    grav_lr_up = zoom(grav_lr, (upscale, upscale), order=1)
+    ship_mask = ~np.isnan(ship_hr)
+    if ship_mask.sum() > 0:
+        ship_hr[ship_mask] = ship_hr[ship_mask] + grav_lr_up[ship_mask]
+
     recon = KalmanGravityReconstructor(grid_shape=(ny_hr, nx_hr), region_size_deg=16,
                                         lr_grid_shape=(ny_lr, nx_lr))
     ship_train_mask, ship_val_mask = split_shipborne_mask(ship_hr, validation_fraction=0.2)
