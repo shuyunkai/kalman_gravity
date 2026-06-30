@@ -157,13 +157,31 @@ def load_shipborne_gravity(lon_grid, lat_grid):
     ship_grav = np.full(lon_mesh.shape, np.nan)
     ship_bathy = np.full(lon_mesh.shape, np.nan)
 
+    ship_grav = np.full(lon_mesh.shape, np.nan)
+    ship_bathy = np.full(lon_mesh.shape, np.nan)
+
     if gravity_points:
         pts = np.vstack(gravity_points)
         pts, unit = quality_control_shipborne(pts)
-        ship_grav = griddata(pts[:, :2], pts[:, 2], (lon_mesh, lat_mesh), method="nearest")
+        # Exact pixel assignment: no nearest-neighbor gridding
+        for lon, lat, grav in pts:
+            j = int(round((lon - lon_grid[0]) / (lon_grid[1] - lon_grid[0])))
+            i = int(round((lat - lat_grid[0]) / (lat_grid[1] - lat_grid[0])))
+            if 0 <= i < ship_grav.shape[0] and 0 <= j < ship_grav.shape[1]:
+                ship_grav[i, j] = grav
+        n_exact_grav = (~np.isnan(ship_grav)).sum()
+        print(f"  Gravity: {n_exact_grav:,} exact pixel assignments "
+              f"({n_exact_grav/len(pts)*100:.1f}% of {len(pts):,} points)")
+
     if bathy_points:
         pts = np.vstack(bathy_points)
-        ship_bathy = griddata(pts[:, :2], pts[:, 2], (lon_mesh, lat_mesh), method="nearest")
+        for lon, lat, bathy in pts:
+            j = int(round((lon - lon_grid[0]) / (lon_grid[1] - lon_grid[0])))
+            i = int(round((lat - lat_grid[0]) / (lat_grid[1] - lat_grid[0])))
+            if 0 <= i < ship_bathy.shape[0] and 0 <= j < ship_bathy.shape[1]:
+                ship_bathy[i, j] = bathy
+        n_exact_bathy = (~np.isnan(ship_bathy)).sum()
+        print(f"  Bathymetry: {n_exact_bathy:,} exact pixel assignments")
 
     return ship_grav, ship_bathy
 
@@ -282,7 +300,7 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
         process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
 
     t0 = time.time()
-    gravity_hr = reconstructor.run(n_iterations=6, smooth_sigma=3.0)
+    gravity_hr = reconstructor.run(n_iterations=6, smooth_sigma=6.0)
     print(f"  Done in {time.time()-t0:.0f}s")
 
     gravity_bilinear = zoom(gravity_lr, (upscale, upscale), order=1)

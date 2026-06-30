@@ -194,7 +194,13 @@ def _load_japan_data(upscale=4):
     pts = np.column_stack([lon2d[valid], lat2d[valid], ship_g[valid]])
     from scipy.interpolate import griddata
     lon_hr_2d, lat_hr_2d = np.meshgrid(lon_hr, lat_hr)
-    ship_hr = griddata(pts[:, :2], pts[:, 2], (lon_hr_2d, lat_hr_2d), method="nearest")
+    # Exact pixel assignment: no nearest-neighbor gridding artifacts
+    ship_hr = np.full((ny_hr, nx_hr), np.nan)
+    for lon, lat, grav in pts:
+        j = int(round((lon - lon_range[0]) / (lon_range[1] - lon_range[0]) * nx_hr))
+        i = int(round((lat - lat_range[0]) / (lat_range[1] - lat_range[0]) * ny_hr))
+        if 0 <= i < ny_hr and 0 <= j < nx_hr:
+            ship_hr[i, j] = grav
 
     # Convert residual gravity → free-air with EGM2008 long-wave trend (>160km)
     from scipy.ndimage import gaussian_filter
@@ -235,7 +241,7 @@ def _load_japan_data(upscale=4):
     recon.initialize(gravity_lr=grav_lr, gravity_ship=ship_hr,
                      ship_train_mask=ship_train_mask,
                      process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
-    grav_kf = recon.run(n_iterations=6, smooth_sigma=3.0)
+    grav_kf = recon.run(n_iterations=6, smooth_sigma=6.0)
     grav_bi = zoom(grav_lr, (upscale, upscale), order=1)
 
     result = (grav_lr, grav_kf, grav_bi, ship_hr, ship_lon, ship_lat, lon_hr, lat_hr,
