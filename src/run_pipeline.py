@@ -157,9 +157,6 @@ def load_shipborne_gravity(lon_grid, lat_grid):
     ship_grav = np.full(lon_mesh.shape, np.nan)
     ship_bathy = np.full(lon_mesh.shape, np.nan)
 
-    ship_grav = np.full(lon_mesh.shape, np.nan)
-    ship_bathy = np.full(lon_mesh.shape, np.nan)
-
     if gravity_points:
         pts = np.vstack(gravity_points)
         pts, unit = quality_control_shipborne(pts)
