@@ -163,25 +163,20 @@ def load_shipborne_gravity(lon_grid, lat_grid):
     if gravity_points:
         pts = np.vstack(gravity_points)
         pts, unit = quality_control_shipborne(pts)
-        # Exact pixel assignment: no nearest-neighbor gridding
-        for lon, lat, grav in pts:
-            j = int(round((lon - lon_grid[0]) / (lon_grid[1] - lon_grid[0])))
-            i = int(round((lat - lat_grid[0]) / (lat_grid[1] - lat_grid[0])))
-            if 0 <= i < ship_grav.shape[0] and 0 <= j < ship_grav.shape[1]:
-                ship_grav[i, j] = grav
-        n_exact_grav = (~np.isnan(ship_grav)).sum()
-        print(f"  Gravity: {n_exact_grav:,} exact pixel assignments "
-              f"({n_exact_grav/len(pts)*100:.1f}% of {len(pts):,} points)")
+        # Vectorized exact pixel assignment
+        j_idx = np.round((pts[:, 0] - lon_grid[0]) / (lon_grid[1] - lon_grid[0])).astype(int)
+        i_idx = np.round((pts[:, 1] - lat_grid[0]) / (lat_grid[1] - lat_grid[0])).astype(int)
+        valid = (j_idx >= 0) & (j_idx < ship_grav.shape[1]) & (i_idx >= 0) & (i_idx < ship_grav.shape[0])
+        ship_grav[i_idx[valid], j_idx[valid]] = pts[valid, 2]
+        print(f"  Gravity: {valid.sum():,} exact pixel assignments ({valid.sum()/len(pts)*100:.1f}%)")
 
     if bathy_points:
         pts = np.vstack(bathy_points)
-        for lon, lat, bathy in pts:
-            j = int(round((lon - lon_grid[0]) / (lon_grid[1] - lon_grid[0])))
-            i = int(round((lat - lat_grid[0]) / (lat_grid[1] - lat_grid[0])))
-            if 0 <= i < ship_bathy.shape[0] and 0 <= j < ship_bathy.shape[1]:
-                ship_bathy[i, j] = bathy
-        n_exact_bathy = (~np.isnan(ship_bathy)).sum()
-        print(f"  Bathymetry: {n_exact_bathy:,} exact pixel assignments")
+        j_idx = np.round((pts[:, 0] - lon_grid[0]) / (lon_grid[1] - lon_grid[0])).astype(int)
+        i_idx = np.round((pts[:, 1] - lat_grid[0]) / (lat_grid[1] - lat_grid[0])).astype(int)
+        valid = (j_idx >= 0) & (j_idx < ship_bathy.shape[1]) & (i_idx >= 0) & (i_idx < ship_bathy.shape[0])
+        ship_bathy[i_idx[valid], j_idx[valid]] = pts[valid, 2]
+        print(f"  Bathymetry: {valid.sum():,} exact pixel assignments")
 
     return ship_grav, ship_bathy
 
