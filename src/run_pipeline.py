@@ -295,7 +295,7 @@ def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
         process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
 
     t0 = time.time()
-    gravity_hr = reconstructor.run(n_iterations=6, smooth_sigma=6.0)
+    gravity_hr = reconstructor.run(n_iterations=6, smooth_sigma=15.0)
     print(f"  Done in {time.time()-t0:.0f}s")
 
     gravity_bilinear = zoom(gravity_lr, (upscale, upscale), order=1)
