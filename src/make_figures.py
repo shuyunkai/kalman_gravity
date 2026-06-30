@@ -354,77 +354,64 @@ def fig4_scatter_and_histogram():
 
 
 def fig5_power_spectrum():
-    """图5: 径向功率谱 — SSV33.1 vs KF 重建。"""
-    print("[Fig 5] Power Spectrum Analysis...")
+    """图5: 径向功率谱 — 日本海沟区域 SSV/双线性/KF 三线对比。"""
+    print("[Fig 5] Power Spectrum Analysis (Japan Trench)...")
 
-    grav_path = DATA_DIR / "ssv32" / "grav_33.1.nc"
-    kf_path = OUTPUT_DIR.parent / "output_global" / "kalman_gravity_1min.nc"
+    (grav_lr, grav_kf, grav_bi, ship_hr, _, _, _, _,
+     _, _, ship_val_mask) = _load_japan_data(upscale=4)
 
-    ds_ssv = xr.open_dataset(str(grav_path), engine=NC_ENGINE)
-    ds_kf = xr.open_dataset(str(kf_path), engine=NC_ENGINE)
-    sample_size = 2048
+    # Mask land (NaN in shipborne) and ocean-only areas for clean PSD
+    ocean_mask = ~np.isnan(ship_hr) & ship_val_mask
+    if ocean_mask.sum() < 1000:
+        # Fallback: use all non-NaN shipborne areas
+        ocean_mask = ~np.isnan(ship_hr)
 
-    # Use each dataset's own shape for central window extraction
-    ny_s, nx_s = ds_ssv.z.shape
-    i0_s = max(0, (ny_s - sample_size) // 2)
-    j0_s = max(0, (nx_s - sample_size) // 2)
-    grav_ssv = ds_ssv.z.values[i0_s:i0_s+sample_size, j0_s:j0_s+sample_size]
-    ds_ssv.close()
-
-    ny_k, nx_k = ds_kf.gravity_anomaly.shape
-    i0_k = max(0, (ny_k - sample_size) // 2)
-    j0_k = max(0, (nx_k - sample_size) // 2)
-    grav_kf = ds_kf.gravity_anomaly.values[i0_k:i0_k+sample_size, j0_k:j0_k+sample_size]
-    ds_kf.close()
-
-    # Fill NaN (land) with 0 before FFT to avoid NaN PSD
-    grav_ssv = np.nan_to_num(grav_ssv, nan=0.0)
-    grav_kf = np.nan_to_num(grav_kf, nan=0.0)
+    # Fill NaN for FFT
+    grav_ssv_up = np.where(ocean_mask, np.nan_to_num(grav_bi, nan=0), 0)
+    grav_kf_clean = np.where(ocean_mask, np.nan_to_num(grav_kf, nan=0), 0)
+    grav_bi_clean = np.where(ocean_mask, np.nan_to_num(grav_bi, nan=0), 0)
 
     from numpy.fft import fft2, fftfreq
 
-    def radial_psd(data, dx=1.0):
-        """计算二维数据的径向功率谱密度。"""
+    def radial_psd(data, dx_arcmin=0.25):
         f = fft2(data)
         psd = np.abs(f) ** 2
         ny, nx = psd.shape
-        ky = fftfreq(ny, dx)
-        kx = fftfreq(nx, dx)
-        kx_grid, ky_grid = np.meshgrid(kx, ky)
-        k = np.sqrt(kx_grid ** 2 + ky_grid ** 2)
+        ky = fftfreq(ny, dx_arcmin)
+        kx = fftfreq(nx, dx_arcmin)
+        k = np.sqrt(kx[np.newaxis, :]**2 + ky[:, np.newaxis]**2)
         k_flat, psd_flat = k.ravel(), psd.ravel()
-
         bins = np.logspace(np.log10(k_flat[k_flat > 0].min()), np.log10(k_flat.max()), 50)
-        psd_mean = []
-        k_center = []
-        for i in range(len(bins) - 1):
-            m = (k_flat >= bins[i]) & (k_flat < bins[i + 1])
-            if m.sum() > 0:
-                psd_mean.append(psd_flat[m].mean())
-                k_center.append((bins[i] + bins[i + 1]) / 2)
+        psd_mean = [psd_flat[(k_flat >= b0) & (k_flat < b1)].mean()
+                    for b0, b1 in zip(bins[:-1], bins[1:])
+                    if ((k_flat >= b0) & (k_flat < b1)).sum() > 0]
+        k_center = [(b0 + b1) / 2 for b0, b1 in zip(bins[:-1], bins[1:])
+                    if ((k_flat >= b0) & (k_flat < b1)).sum() > 0]
         return np.array(k_center), np.array(psd_mean)
 
-    k_ssv, p_ssv = radial_psd(grav_ssv)
-    k_kf, p_kf = radial_psd(grav_kf)
+    # dx = 15 arcsec = 0.25 arcmin at upscale=4
+    k_ssv, p_ssv = radial_psd(grav_ssv_up, dx_arcmin=0.25)
+    k_kf, p_kf = radial_psd(grav_kf_clean, dx_arcmin=0.25)
+    k_bi, p_bi = radial_psd(grav_bi_clean, dx_arcmin=0.25)
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 6))
-    ax.loglog(k_ssv, p_ssv, "r-", lw=1.5, label="SSV33.1")
+    ax.loglog(k_bi, p_bi, "gray", lw=1, alpha=0.5, label="双线性插值")
     ax.loglog(k_kf, p_kf, "b-", lw=1.5, label="卡尔曼滤波")
+    ax.loglog(k_ssv, p_ssv, "r-", lw=1.5, label="SSV33.1 (上采样)")
+
+    # Annotate wavelength bands
+    for wl_km, label, ls in [(160, '160 km', ':'), (20, '20 km', '--')]:
+        k_val = 2 * np.pi / (wl_km / (111.32 / 60))
+        if k_val > ax.get_xlim()[0] and k_val < ax.get_xlim()[1]:
+            ax.axvline(k_val, color='gray', ls=ls, lw=0.8, alpha=0.5)
+            ax.text(k_val * 0.8, ax.get_ylim()[1] * 0.5, wl_km,
+                    fontsize=8, color='gray', rotation=90)
+
     ax.set_xlabel("波数 (周期/弧分)")
     ax.set_ylabel("功率谱密度")
-    ax.set_title("径向功率谱: SSV33.1 vs 卡尔曼滤波")
+    ax.set_title("径向功率谱: 日本海沟区域对比 (15'')\nSSV(红)/双线性(灰)/KF(蓝)")
     ax.legend()
     ax.grid(True, alpha=0.3)
-    # Annotate wavelength bands for geophysical interpretation
-    for wl_km, label, y_pos in [(160, '160 km', 0.95), (20, '20 km', 0.85)]:
-        k_val = 2 * np.pi / (wl_km / (111.32 / 60))  # wavenumber in cycles/arcmin
-        if k_val > ax.get_xlim()[0] and k_val < ax.get_xlim()[1]:
-            ax.axvline(k_val, color='gray', ls=':', lw=0.8, alpha=0.5)
-            ax.text(k_val * 1.1, ax.get_ylim()[1] * y_pos, wl_km,
-                    fontsize=8, color='gray', alpha=0.7)
-    # NOTE: For band-specific validation, add:
-    # TODO: compute band-separated PSD_ratio = PSD(KF)/PSD(SSV) and verify
-    #       signal enhancement in 20-160 km band without noise amplification
     plt.tight_layout()
     plt.savefig(OUTPUT_DIR / "fig5_power_spectrum.png", dpi=150, bbox_inches="tight")
     plt.close()
