@@ -418,7 +418,7 @@ def plot_error_vs_distance(train_points, val_points, predictions, method_names, 
 
 
 def plot_metrics_bar(val_truth, predictions, method_names, save_path):
-    """多指标柱状图对比."""
+    """多指标柱状图对比: 均方根误差 / 平均绝对误差 / 最大误差."""
     metrics = {name: {} for name in method_names}
     for name, pred in zip(method_names, predictions):
         valid = ~(np.isnan(pred) | np.isnan(val_truth))
@@ -426,11 +426,9 @@ def plot_metrics_bar(val_truth, predictions, method_names, save_path):
         diff = p - t
         metrics[name]['均方根误差'] = np.sqrt(np.mean(diff ** 2))
         metrics[name]['平均绝对误差'] = np.mean(np.abs(diff))
-        metrics[name]['标准差'] = np.std(diff)
-        metrics[name]['绝对偏差'] = np.abs(np.mean(diff))
-        metrics[name]['95%分位|误差|'] = np.percentile(np.abs(diff), 95)
+        metrics[name]['最大误差'] = np.max(np.abs(diff))
 
-    metric_names = ['均方根误差', '平均绝对误差', '标准差', '绝对偏差', '95%分位|误差|']
+    metric_names = ['均方根误差', '平均绝对误差', '最大误差']
     n_metrics = len(metric_names)
     n_methods = len(method_names)
 
