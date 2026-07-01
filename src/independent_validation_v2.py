@@ -249,15 +249,15 @@ def main(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     val_mean = np.mean(val_points[:, 2])
     print(f"  Val points FAA mean: {val_mean:.2f} mGal (using as-is, no trend recovery)")
 
-    print("\n[4/5] Reconstructing with 4 methods...")
+    print("\n[4/5] Reconstructing with 3 methods...")
     results = {}
 
-    # Bilinear
+    # Bilinear (传统基线)
     gravity_bilinear = sp_zoom(gravity_lr, (upscale, upscale), order=1)
     results['Bilinear'] = gravity_bilinear
 
-    # KF original (15")
-    print("\n  [b] KF original (15'' grid)...")
+    # KF original (本项目最优方法, 15" 网格)
+    print("\n  [b] KF (15'' grid, 本项目方法)...")
     t0 = time.time()
     r = KalmanGravityReconstructor(
         grid_shape=(ny_hr, nx_hr),
@@ -267,70 +267,15 @@ def main(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
         gravity_lr=gravity_lr, gravity_ship=ship_grav,
         ship_train_mask=train_mask,
         process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
-    results['KF_orig'] = r.run(n_iterations=6, smooth_sigma=15.0)
+    results['KF'] = r.run(n_iterations=6, smooth_sigma=15.0)
     print(f"      done {time.time()-t0:.0f}s")
 
-    # KF v2b (1' + bilinear)
-    print("\n  [c] KF v2b (1' grid + bilinear)...")
-    t0 = time.time()
-    ship_1m, train_1m = downsample_to_1min(ship_grav, hr_per_lr=upscale)
-    r = KalmanGravityReconstructor(
-        grid_shape=(ny_lr, nx_lr),
-        region_size_deg=lat_range[1] - lat_range[0],
-        lr_grid_shape=(ny_lr, nx_lr))
-    r.initialize(
-        gravity_lr=gravity_lr, gravity_ship=ship_1m,
-        ship_train_mask=train_1m,
-        process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
-    grav_1m = r.run(n_iterations=6, smooth_sigma=4.0)
-    results['KF_v2b'] = sp_zoom(grav_1m, (upscale, upscale), order=1)
-    print(f"      done {time.time()-t0:.0f}s")
-
-    # Kriging
-    print("\n  [d] Kriging+Trend (1' grid + bilinear)...")
-    t0 = time.time()
-    try:
-        from pykrige.ok import OrdinaryKriging
-        lon_pts, lat_pts, val_pts = _subsample_train_points(
-            lon_hr, lat_hr, ship_grav, train_mask, n_target=3000, seed=42)
-        lon0, lat0 = lon_range[0], lat_range[0]
-        dlat = lat_pts - lat0
-        dlon = lon_pts - lon0
-        A_train = np.column_stack([np.ones_like(dlat), dlat, dlon, dlat*dlon, dlat**2, dlon**2])
-        coef, *_ = np.linalg.lstsq(A_train, val_pts, rcond=None)
-        resid_train = val_pts - A_train @ coef
-        resid_var = np.var(resid_train)
-        OK = OrdinaryKriging(
-            lon_pts, lat_pts, resid_train,
-            variogram_model='spherical',
-            variogram_parameters={'nugget': 5.0, 'range': 0.25,
-                                   'sill': max(resid_var, 6.0)},
-            verbose=False, enable_plotting=False,
-            exact_values=False, pseudo_inv=True)
-        z_krig_1m, _ = OK.execute('grid', lon_lr, lat_lr, backend='vectorized')
-        z_krig_1m = np.asarray(z_krig_1m)
-        if z_krig_1m.shape != (ny_lr, nx_lr):
-            z_krig_1m = z_krig_1m.T
-        ii_1m, jj_1m = np.meshgrid(np.arange(ny_lr), np.arange(nx_lr), indexing='ij')
-        dlat_g1 = lat_lr[ii_1m] - lat0
-        dlon_g1 = lon_lr[jj_1m] - lon0
-        A_grid_1m = np.column_stack([np.ones(ny_lr * nx_lr), dlat_g1.ravel(), dlon_g1.ravel(),
-                                      (dlat_g1 * dlon_g1).ravel(),
-                                      (dlat_g1**2).ravel(), (dlon_g1**2).ravel()])
-        trend_1m = (A_grid_1m @ coef).reshape(ny_lr, nx_lr)
-        results['Kriging'] = sp_zoom(trend_1m + z_krig_1m, (upscale, upscale), order=1)
-        print(f"      done {time.time()-t0:.0f}s")
-    except Exception as e:
-        print(f"      Kriging failed: {e}")
-        results['Kriging'] = None
-
-    # Freq Fusion (Butterworth)
-    print("\n  [e] Frequency-domain Fusion (Butterworth, cutoff=27km)...")
+    # Freq Fusion (Butterworth, 传统方法对照)
+    print("\n  [c] Frequency-domain Fusion (Butterworth, cutoff=27km)...")
     t0 = time.time()
     try:
         from freq_fusion_baseline import butterworth_2d_filter
         ssv_hr_smooth = gaussian_filter(results['Bilinear'], sigma=2.0)
-        # Fill ship grid NaN with SSV before FFT
         ship_filled = ship_grav.copy()
         nan_mask = np.isnan(ship_filled)
         ship_filled[nan_mask] = results['Bilinear'][nan_mask]

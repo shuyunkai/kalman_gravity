@@ -179,15 +179,15 @@ def main(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
         ship_grav[train_mask_raw] = ship_grav[train_mask_raw] + ssv_trend_hr[train_mask_raw]
     train_mask = ~np.isnan(ship_grav)
 
-    # === Build 4 models (skip Kriging since it crashes) ===
-    print("\n[2/3] Building 4 models...")
+    # === Build 3 models ===
+    print("\n[2/3] Building 3 models...")
     models = {}
 
-    # Bilinear
+    # Bilinear (传统基线)
     models['Bilinear'] = ssv_hr.copy()
 
-    # KF original
-    print("  KF orig...")
+    # KF (本项目最优方法, 15" 网格)
+    print("  KF (15'' grid)...")
     r = KalmanGravityReconstructor(
         grid_shape=(ny_hr, nx_hr),
         region_size_deg=lat_range[1] - lat_range[0],
@@ -196,24 +196,9 @@ def main(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
         gravity_lr=gravity_lr, gravity_ship=ship_grav,
         ship_train_mask=train_mask,
         process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
-    models['KF_orig'] = r.run(n_iterations=6, smooth_sigma=15.0)
+    models['KF'] = r.run(n_iterations=6, smooth_sigma=15.0)
 
-    # KF v2b
-    print("  KF v2b...")
-    from independent_validation_v2 import downsample_to_1min
-    ship_1m, train_1m = downsample_to_1min(ship_grav, hr_per_lr=upscale)
-    r = KalmanGravityReconstructor(
-        grid_shape=(ny_lr, nx_lr),
-        region_size_deg=lat_range[1] - lat_range[0],
-        lr_grid_shape=(ny_lr, nx_lr))
-    r.initialize(
-        gravity_lr=gravity_lr, gravity_ship=ship_1m,
-        ship_train_mask=train_1m,
-        process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
-    grav_1m = r.run(n_iterations=6, smooth_sigma=4.0)
-    models['KF_v2b'] = sp_zoom(grav_1m, (upscale, upscale), order=1)
-
-    # Freq Fusion
+    # Freq Fusion (传统方法对照)
     print("  FreqFusion...")
     ssv_hr_smooth = gaussian_filter(ssv_hr, sigma=2.0)
     ship_filled = ship_grav.copy()
