@@ -159,7 +159,7 @@ def load_shipborne_gravity(lon_grid, lat_grid):
 
     if gravity_points:
         pts = np.vstack(gravity_points)
-        pts, unit = quality_control_shipborne(pts)
+        print(f"  Raw gravity points: {len(pts):,}")
         # Vectorized exact pixel assignment
         j_idx = np.round((pts[:, 0] - lon_grid[0]) / (lon_grid[1] - lon_grid[0])).astype(int)
         i_idx = np.round((pts[:, 1] - lat_grid[0]) / (lat_grid[1] - lat_grid[0])).astype(int)
