@@ -324,6 +324,31 @@ def main(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
         print(f"      Kriging failed: {e}")
         results['Kriging'] = None
 
+    # Freq Fusion (Butterworth)
+    print("\n  [e] Frequency-domain Fusion (Butterworth, cutoff=27km)...")
+    t0 = time.time()
+    try:
+        from freq_fusion_baseline import butterworth_2d_filter
+        ssv_hr_smooth = gaussian_filter(results['Bilinear'], sigma=2.0)
+        # Fill ship grid NaN with SSV before FFT
+        ship_filled = ship_grav.copy()
+        nan_mask = np.isnan(ship_filled)
+        ship_filled[nan_mask] = results['Bilinear'][nan_mask]
+        ship_filled = gaussian_filter(ship_filled, sigma=2.0)
+        dx_deg = (lon_range[1] - lon_range[0]) / nx_hr
+        dy_deg = (lat_range[1] - lat_range[0]) / ny_hr
+        lat_center = (lat_range[0] + lat_range[1]) / 2.0
+        cutoff_km = 27.0
+        ship_hp = butterworth_2d_filter(ship_filled, dx_deg, dy_deg, lat_center,
+                                         cutoff_km, btype='high', order=4)
+        ssv_lp = butterworth_2d_filter(ssv_hr_smooth, dx_deg, dy_deg, lat_center,
+                                        cutoff_km, btype='low', order=4)
+        results['FreqFusion'] = ssv_lp + ship_hp
+        print(f"      done {time.time()-t0:.0f}s")
+    except Exception as e:
+        print(f"      FreqFusion failed: {e}")
+        results['FreqFusion'] = None
+
     print("\n[5/5] Multi-scale evaluation vs shipborne...")
     print("\n  ===== Scale 1: 15'' model vs raw 10s ship points =====")
     print(f"  (含代表性误差: 460m 像素 vs 50m 采样, 重力梯度大处误差大)")
