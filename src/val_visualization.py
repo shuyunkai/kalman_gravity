@@ -72,7 +72,7 @@ def plot_scatter(val_truth, predictions, method_names, save_path):
         valid = ~(np.isnan(pred) | np.isnan(val_truth))
         p, t = pred[valid], val_truth[valid]
         ax.scatter(t, p, s=2, alpha=0.3, c='steelblue')
-        ax.plot(rng, rng, 'r--', lw=1.5, label='y=x (完美)')
+        ax.plot(rng, rng, 'r--', lw=1.5, label='y=x (完美对应)')
         rmse = np.sqrt(np.mean((p - t) ** 2))
         bias = np.mean(p - t)
         corr = np.corrcoef(p, t)[0, 1]
@@ -166,44 +166,69 @@ def plot_track_profile(val_points, predictions, method_names, save_path):
     print(f"  航迹剖面: {save_path}")
 
 
-def plot_validation_region_map(train_points, val_points, lon_range, lat_range, save_path):
-    """验证区域地图: 显示训练巡航航迹与验证巡航 MR22-04 的位置."""
-    fig, ax = plt.subplots(figsize=(10, 8))
+def plot_validation_region_map(train_points, val_points, lon_range, lat_range,
+                                bg_field, bg_lon, bg_lat, save_path):
+    """验证区域地图: SSV 重力场为背景, 叠加训练/验证巡航航迹."""
+    fig, ax = plt.subplots(figsize=(11, 8))
 
-    # Plot training cruises (gray, sparse)
+    # Background: SSV gravity field (shows bathymetry-related gravity features
+    # like Japan Trench as strong gradients)
+    vmax = np.nanpercentile(np.abs(bg_field), 99)
+    im = ax.pcolormesh(bg_lon, bg_lat, bg_field,
+                       cmap='RdBu_r', vmin=-vmax, vmax=vmax, shading='auto')
+    cb = plt.colorbar(im, ax=ax, label='SSV 卫星测高重力 FAA (mGal)', shrink=0.85)
+
+    # Plot training cruises (light yellow, sparse, on top of background)
     ax.scatter(train_points[:, 0], train_points[:, 1],
-               s=0.5, c='gray', alpha=0.25, label=f'训练巡航 (30 个, n={len(train_points):,})')
+               s=0.5, c='yellow', alpha=0.35, edgecolors='none',
+               label=f'训练巡航 (30 个, n={len(train_points):,})')
 
-    # Plot validation cruise MR22-04 (red, prominent)
+    # Plot validation cruise MR22-04 (black, prominent)
     ax.scatter(val_points[:, 0], val_points[:, 1],
-               s=0.8, c='red', alpha=0.6, label=f'验证巡航 MR22-04 (n={len(val_points):,})')
+               s=0.8, c='black', alpha=0.7, edgecolors='none',
+               label=f'验证巡航 MR22-04 (n={len(val_points):,})')
 
     # Region boundary
     rect_x = [lon_range[0], lon_range[1], lon_range[1], lon_range[0], lon_range[0]]
     rect_y = [lat_range[0], lat_range[0], lat_range[1], lat_range[1], lat_range[0]]
-    ax.plot(rect_x, rect_y, 'b--', lw=1.5, alpha=0.7, label='验证区域')
+    ax.plot(rect_x, rect_y, 'c--', lw=1.5, alpha=0.8, label='验证区域边界')
 
-    ax.set_xlim(lon_range[0] - 1, lon_range[1] + 1)
-    ax.set_ylim(lat_range[0] - 1, lat_range[1] + 1)
+    ax.set_xlim(lon_range[0] - 0.5, lon_range[1] + 0.5)
+    ax.set_ylim(lat_range[0] - 0.5, lat_range[1] + 0.5)
     ax.set_xlabel('经度 (°E)')
     ax.set_ylabel('纬度 (°N)')
-    ax.set_title(f'独立验证区域: 日本海沟及周边\n'
-                 f'lon=[{lon_range[0]}°E, {lon_range[1]}°E], '
-                 f'lat=[{lat_range[0]}°N, {lat_range[1]}°N]\n'
-                 f'训练: 30 个巡航 (灰)  |  验证: MR22-04 (红, 完全独立)')
+    ax.set_title(f'独立验证区域: 日本海沟及周边 (背景为 SSV 卫星重力场)\n'
+                 f'经度 [{lon_range[0]}°E - {lon_range[1]}°E], '
+                 f'纬度 [{lat_range[0]}°N - {lat_range[1]}°N]\n'
+                 f'训练: 30 个巡航 (黄)  |  验证: MR22-04 (黑, 完全独立未参与训练)')
     ax.legend(loc='lower left', fontsize=10, framealpha=0.9)
     ax.grid(alpha=0.3, linestyle=':')
     ax.set_aspect('equal', adjustable='box')
 
-    # Annotate key features
-    ax.text(lon_range[0] + 0.5, lat_range[1] - 0.5,
+    # Annotate key features (Japan Trench around lon~142-144, lat~35-39)
+    ax.annotate('日本海沟\n(Japan Trench)',
+                xy=(142.5, 36.5), xytext=(146, 32.5),
+                fontsize=10, ha='center', color='darkred', fontweight='bold',
+                arrowprops=dict(arrowstyle='->', color='darkred', lw=1.5),
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
+                          edgecolor='darkred', alpha=0.9))
+    # Annotate the validation cruise
+    ax.annotate('MR22-04\n(R/V Mirai, 2022)',
+                xy=(141.5, 35.0), xytext=(141.0, 31.0),
+                fontsize=9, ha='center', color='black',
+                arrowprops=dict(arrowstyle='->', color='black', lw=1),
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='lightyellow',
+                          edgecolor='black', alpha=0.9))
+
+    # Region characteristics text box
+    ax.text(lon_range[0] + 0.3, lat_range[1] - 0.3,
             '验证区域特点:\n'
-            '- 含日本海沟 (最深 ~10km)\n'
-            '- 重力场变化剧烈\n'
-            '- 含海陆边界\n'
+            '- 含日本海沟 (海沟最深 ~10km)\n'
+            '- 重力场变化剧烈 (蓝色负异常带)\n'
+            '- 含海陆边界与岛弧\n'
             '- 是模型精度的严苛测试场',
             fontsize=9, ha='left', va='top',
-            bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.85),
+            bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.9),
             transform=ax.transData)
 
     plt.tight_layout()
@@ -255,13 +280,13 @@ def plot_spatial_error_map(val_points, predictions, method_names, save_path,
 
 def plot_method_diff_map(val_points, predictions, method_names, save_path,
                           lon_range, lat_range):
-    """方法差异空间图: KF 与 Bilinear 在每个验证点的误差差异."""
-    if 'KF' not in method_names or 'Bilinear' not in method_names:
-        print(f"  跳过方法差异图 (需要 KF 和 Bilinear)")
+    """方法差异空间图: 卡尔曼滤波 vs 双线性插值 的逐点误差差异."""
+    if '卡尔曼滤波' not in method_names or '双线性插值' not in method_names:
+        print(f"  跳过方法差异图 (需要 卡尔曼滤波 和 双线性插值)")
         return
 
-    kf_pred = predictions[method_names.index('KF')]
-    bi_pred = predictions[method_names.index('Bilinear')]
+    kf_pred = predictions[method_names.index('卡尔曼滤波')]
+    bi_pred = predictions[method_names.index('双线性插值')]
     truth = val_points[:, 2]
 
     valid = ~(np.isnan(kf_pred) | np.isnan(bi_pred) | np.isnan(truth))
@@ -284,19 +309,19 @@ def plot_method_diff_map(val_points, predictions, method_names, save_path,
     ax_map.set_ylabel('纬度 (°N)')
     n_better = (diff < 0).sum()
     n_worse = (diff > 0).sum()
-    ax_map.set_title(f'KF 相对 Bilinear 的逐点改进\n'
-                     f'绿: KF 更准 ({n_better:,} 点, {n_better/len(diff)*100:.1f}%)  '
-                     f'红: Bilinear 更准 ({n_worse:,} 点, {n_worse/len(diff)*100:.1f}%)')
+    ax_map.set_title(f'卡尔曼滤波 相对 双线性插值 的逐点改进\n'
+                     f'绿: 卡尔曼滤波更准 ({n_better:,} 点, {n_better/len(diff)*100:.1f}%)  '
+                     f'红: 双线性插值更准 ({n_worse:,} 点, {n_worse/len(diff)*100:.1f}%)')
     ax_map.grid(alpha=0.3, linestyle=':')
     ax_map.set_aspect('equal', adjustable='box')
-    plt.colorbar(sc, ax=ax_map, label='err(KF) - err(Bilinear) (mGal)', shrink=0.8)
+    plt.colorbar(sc, ax=ax_map, label='误差(卡尔曼) - 误差(双线性) (mGal)', shrink=0.8)
 
     # Histogram of the difference
     ax_hist.hist(diff, bins=60, color='steelblue', edgecolor='white', alpha=0.8)
     ax_hist.axvline(0, color='k', linestyle='--', lw=1.5)
     ax_hist.axvline(diff.mean(), color='red', linestyle='-',
                     lw=1.5, label=f'均值={diff.mean():.2f}')
-    ax_hist.set_xlabel('err(KF) - err(Bilinear) (mGal)')
+    ax_hist.set_xlabel('误差(卡尔曼) - 误差(双线性) (mGal)')
     ax_hist.set_ylabel('点数')
     ax_hist.set_title('逐点改进分布')
     ax_hist.legend(fontsize=9)
@@ -370,7 +395,7 @@ def plot_error_vs_distance(train_points, val_points, predictions, method_names, 
 
         ax.scatter(d, err, s=1, alpha=0.15, c='lightgray')
         ax.plot(bin_centers, rmse_per_bin, 'o-', color='tab:red',
-                lw=1.5, markersize=6, label='分段 RMSE')
+                lw=1.5, markersize=6, label='分段均方根误差')
         # Trend line through bin centers
         valid_bins = ~np.isnan(rmse_per_bin)
         if valid_bins.sum() > 1:
@@ -384,7 +409,7 @@ def plot_error_vs_distance(train_points, val_points, predictions, method_names, 
         ax.grid(alpha=0.3)
         ax.legend(fontsize=9)
 
-    fig.suptitle('误差 vs 距最近训练点距离\n(KF 应在远距离上保持低误差 → 体现空间传播能力)',
+    fig.suptitle('误差 vs 距最近训练点距离\n(卡尔曼滤波应在远距离上保持低误差 → 体现空间传播能力)',
                  fontsize=12, y=1.02)
     plt.tight_layout()
     plt.savefig(save_path, dpi=150, bbox_inches='tight')
@@ -399,13 +424,13 @@ def plot_metrics_bar(val_truth, predictions, method_names, save_path):
         valid = ~(np.isnan(pred) | np.isnan(val_truth))
         p, t = pred[valid], val_truth[valid]
         diff = p - t
-        metrics[name]['RMSE'] = np.sqrt(np.mean(diff ** 2))
-        metrics[name]['MAE'] = np.mean(np.abs(diff))
-        metrics[name]['STD'] = np.std(diff)
-        metrics[name]['Bias'] = np.abs(np.mean(diff))
-        metrics[name]['Max|err|'] = np.percentile(np.abs(diff), 95)
+        metrics[name]['均方根误差'] = np.sqrt(np.mean(diff ** 2))
+        metrics[name]['平均绝对误差'] = np.mean(np.abs(diff))
+        metrics[name]['标准差'] = np.std(diff)
+        metrics[name]['绝对偏差'] = np.abs(np.mean(diff))
+        metrics[name]['95%分位|误差|'] = np.percentile(np.abs(diff), 95)
 
-    metric_names = ['RMSE', 'MAE', 'STD', 'Bias', 'Max|err|']
+    metric_names = ['均方根误差', '平均绝对误差', '标准差', '绝对偏差', '95%分位|误差|']
     n_metrics = len(metric_names)
     n_methods = len(method_names)
 
@@ -471,11 +496,11 @@ def main(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     print("\n[2/3] Building 3 models...")
     models = {}
 
-    # Bilinear (传统基线)
-    models['Bilinear'] = ssv_hr.copy()
+    # 双线性插值 (传统基线)
+    models['双线性插值'] = ssv_hr.copy()
 
-    # KF (本项目最优方法, 15" 网格)
-    print("  KF (15'' grid)...")
+    # 卡尔曼滤波 (本项目最优方法, 15" 网格)
+    print("  卡尔曼滤波 (15'' 网格)...")
     r = KalmanGravityReconstructor(
         grid_shape=(ny_hr, nx_hr),
         region_size_deg=lat_range[1] - lat_range[0],
@@ -484,10 +509,10 @@ def main(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
         gravity_lr=gravity_lr, gravity_ship=ship_grav,
         ship_train_mask=train_mask,
         process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
-    models['KF'] = r.run(n_iterations=6, smooth_sigma=15.0)
+    models['卡尔曼滤波'] = r.run(n_iterations=6, smooth_sigma=15.0)
 
-    # Freq Fusion (传统方法对照)
-    print("  FreqFusion...")
+    # 频域融合 (传统方法对照)
+    print("  频域融合...")
     ssv_hr_smooth = gaussian_filter(ssv_hr, sigma=2.0)
     ship_filled = ship_grav.copy()
     nan_mask = np.isnan(ship_filled)
@@ -500,7 +525,7 @@ def main(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
                                      27.0, btype='high', order=4)
     ssv_lp = butterworth_2d_filter(ssv_hr_smooth, dx_deg, dy_deg, lat_center,
                                     27.0, btype='low', order=4)
-    models['FreqFusion'] = ssv_lp + ship_hp
+    models['频域融合'] = ssv_lp + ship_hp
 
     # === Get predictions at val points ===
     print("\n[3/3] Generating visualizations...")
@@ -524,6 +549,7 @@ def main(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     # Generate plots
     print("\n  生成可视化图...")
     plot_validation_region_map(train_points, val_points, lon_range, lat_range,
+                                ssv_hr, lon_hr, lat_hr,
                                 OUTPUT_DIR / "val_region_map.png")
     plot_scatter(val_truth, predictions, method_names,
                  OUTPUT_DIR / "val_scatter_model_vs_ship.png")
