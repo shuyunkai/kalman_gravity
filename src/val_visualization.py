@@ -440,15 +440,16 @@ def plot_metrics_bar(val_truth, predictions, method_names, save_path):
         metrics[name]['平均绝对误差'] = np.mean(np.abs(diff))
         metrics[name]['最大误差'] = np.max(np.abs(diff))
 
-    metric_names = ['均方根误差', '平均绝对误差', '最大误差']
+    metric_names = ['均方根误差 (RMSE)', '平均绝对误差 (MAE)', '最大误差 (Max|e|)']
+    metric_keys = ['均方根误差', '平均绝对误差', '最大误差']
     n_metrics = len(metric_names)
     n_methods = len(method_names)
 
     fig, axes = plt.subplots(1, n_metrics, figsize=(4 * n_metrics, 5))
     colors = ['tab:red', 'tab:blue', 'tab:green', 'tab:purple', 'tab:orange']
 
-    for ax, mname in zip(axes, metric_names):
-        vals = [metrics[name][mname] for name in method_names]
+    for ax, mname, mkey in zip(axes, metric_names, metric_keys):
+        vals = [metrics[name][mkey] for name in method_names]
         bars = ax.bar(range(n_methods), vals, color=colors[:n_methods],
                        edgecolor='black', linewidth=0.5, alpha=0.85)
         ax.set_xticks(range(n_methods))
@@ -465,10 +466,6 @@ def plot_metrics_bar(val_truth, predictions, method_names, save_path):
                     ha='center', va='bottom', fontsize=9,
                     fontweight='bold' if i == best_idx else 'normal')
         ax.set_ylim(0, max(vals) * 1.15)
-
-    fig.suptitle(f'15'' 模型精度多指标对比 (n={len(val_truth):,} 验证点)\n'
-                 f'绿框 = 该指标最优方法',
-                 fontsize=12, y=1.02)
     plt.tight_layout()
     plt.savefig(save_path, dpi=150, bbox_inches='tight')
     plt.close()
