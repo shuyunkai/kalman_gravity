@@ -468,6 +468,58 @@ def plot_error_vs_distance(train_points, val_points, predictions, method_names, 
     print(f"  误差-距离图: {save_path}")
 
 
+def plot_gravity_field_comparison(models, method_names, lon_hr, lat_hr,
+                                   lon_range, lat_range, val_points, save_path):
+    """验证区域三方法重力异常场对比图 (1×3 子图, 同色标).
+
+    每个 subplot 显示该方法的 15" FAA 网格, 叠加 MR22-04 验证航迹.
+    共享色标便于直接比较三者的场结构差异.
+    """
+    from matplotlib.colors import TwoSlopeNorm
+    n = len(method_names)
+    fig, axes = plt.subplots(1, n, figsize=(6.2 * n, 5.5),
+                              sharex=True, sharey=True)
+    if n == 1:
+        axes = [axes]
+
+    # 共享色标: 用三方法拼接后的 99.5 分位确定 |FAA| 上限
+    all_vals = np.concatenate([m.ravel() for m in models])
+    all_vals = all_vals[~np.isnan(all_vals)]
+    vmax = float(np.percentile(np.abs(all_vals), 99.5))
+    norm = TwoSlopeNorm(vmin=-vmax, vcenter=0, vmax=vmax)
+
+    extent = [lon_hr[0], lon_hr[-1], lat_hr[0], lat_hr[-1]]
+
+    for ax, grav, name in zip(axes, models, method_names):
+        im = ax.imshow(grav, cmap='RdBu_r', norm=norm, aspect='equal',
+                       origin='lower', extent=extent, interpolation='nearest')
+        # 叠加 MR22-04 验证航迹 (黑色细线)
+        ax.plot(val_points[:, 0], val_points[:, 1],
+                'k-', lw=0.4, alpha=0.55)
+        ax.set_xlim(lon_range)
+        ax.set_ylim(lat_range)
+        ax.set_xlabel('经度 (°E)', fontsize=10)
+        ax.set_ylabel('纬度 (°N)', fontsize=10)
+        ax.set_title(name, fontsize=11, fontweight='bold', pad=8)
+        ax.set_xticks(np.arange(lon_range[0], lon_range[1] + 0.1, 2))
+        ax.set_yticks(np.arange(lat_range[0], lat_range[1] + 0.1, 2))
+        ax.grid(alpha=0.25, color='gray', linestyle=':', linewidth=0.5)
+        ax.tick_params(labelsize=8.5)
+
+    # 共享 colorbar
+    cb = fig.colorbar(im, ax=axes, orientation='vertical',
+                      pad=0.015, shrink=0.85, aspect=35, extend='both')
+    cb.set_label('自由空气重力异常 FAA (mGal)', fontsize=10)
+    cb.ax.tick_params(labelsize=9)
+
+    fig.suptitle('验证区域 15" 重力异常场对比 (日本海沟及周边)\n'
+                 '黑线: MR22-04 验证航迹',
+                 fontsize=12, y=1.02)
+    plt.savefig(save_path, dpi=180, bbox_inches='tight')
+    plt.close()
+    print(f"  重力异常场对比图: {save_path}")
+
+
 def plot_metrics_bar(val_truth, predictions, method_names, save_path):
     """科研风格横向柱状图对比: 均方根误差 / 平均绝对误差 / 最大误差.
 
@@ -647,6 +699,10 @@ def main(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
                             OUTPUT_DIR / "val_error_vs_distance.png")
     plot_metrics_bar(val_truth, predictions, method_names,
                      OUTPUT_DIR / "val_metrics_bar.png")
+    plot_gravity_field_comparison([models[n] for n in method_names],
+                                   method_names, lon_hr, lat_hr,
+                                   lon_range, lat_range, val_points,
+                                   OUTPUT_DIR / "val_gravity_field_comparison.png")
 
     print(f"\n  所有图保存至: {OUTPUT_DIR}")
 
