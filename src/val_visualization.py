@@ -469,9 +469,9 @@ def plot_error_vs_distance(train_points, val_points, predictions, method_names, 
 
 
 def plot_metrics_bar(val_truth, predictions, method_names, save_path):
-    """科研风格 Lollipop (Cleveland dot) 图对比: 均方根误差 / 平均绝对误差 / 最大误差.
+    """科研风格横向柱状图对比: 均方根误差 / 平均绝对误差 / 最大误差.
 
-    风格: 极简, Tufte 设计, 无柱体装饰, 用点+茎线展示数值.
+    风格: 极简, 单色为主 + 一个强调色, 无边框装饰.
     """
     metrics = {name: {} for name in method_names}
     for name, pred in zip(method_names, predictions):
@@ -487,65 +487,60 @@ def plot_metrics_bar(val_truth, predictions, method_names, save_path):
     n_metrics = len(metric_names)
     n_methods = len(method_names)
 
-    fig, axes = plt.subplots(1, n_metrics, figsize=(4.6 * n_metrics, 3.8))
+    fig, axes = plt.subplots(1, n_metrics, figsize=(4.4 * n_metrics, 4.0))
     if n_metrics == 1:
         axes = [axes]
 
-    # Muted, publication-style colors; best method highlighted
-    dot_colors = ['#6E6E6E', '#6E6E6E', '#6E6E6E']  # gray for non-best
-    best_color = '#C44E52'  # muted red for best
+    # Single muted base color + one accent for best
+    base_color = '#A6BDDB'   # soft blue-gray
+    best_color = '#3690C0'   # deeper blue accent
 
     for ax, mname, mkey in zip(axes, metric_names, metric_keys):
         vals = [metrics[name][mkey] for name in method_names]
         best_idx = int(np.argmin(vals))
 
         y_pos = np.arange(n_methods)
-        # Lollipop: horizontal stem from 0 to value, dot at end
-        for i, v in enumerate(vals):
-            color = best_color if i == best_idx else dot_colors[i]
-            marker_size = 14 if i == best_idx else 9
-            # Stem
-            ax.hlines(y=i, xmin=0, xmax=v, color=color,
-                      linewidth=1.6 if i == best_idx else 1.2,
-                      alpha=0.95 if i == best_idx else 0.7)
-            # Dot
-            ax.plot(v, i, 'o', color=color, markersize=marker_size,
-                    markeredgecolor='white', markeredgewidth=1.2,
-                    zorder=5)
-            # Value label
-            ax.text(v + max(vals) * 0.02, i, f'{v:.2f}',
-                    va='center', ha='left', fontsize=10,
-                    color=color,
-                    fontweight='bold' if i == best_idx else 'normal')
+        colors = [base_color] * n_methods
+        colors[best_idx] = best_color
 
-        # Style
+        bars = ax.barh(y_pos, vals, color=colors, edgecolor='none',
+                        height=0.55)
+
         ax.invert_yaxis()
         ax.set_yticks(y_pos)
         ax.set_yticklabels(method_names, fontsize=10)
-        ax.set_xlabel(f'{mname} (mGal)', fontsize=10, labelpad=8)
-        ax.set_title(mname, fontsize=11, fontweight='bold', pad=10)
+        ax.set_xlabel(f'{mname} (mGal)', fontsize=10, labelpad=8,
+                       color='#444444')
+        ax.set_title(mname, fontsize=11, fontweight='bold', pad=10,
+                     color='#222222')
 
-        # Subtle x grid only
-        ax.grid(axis='x', alpha=0.25, linestyle='-', linewidth=0.5, color='#CCCCCC')
-        ax.set_axisbelow(True)
-        # Remove all spines except bottom
+        # Value labels at end of bars
+        x_max = max(vals)
+        for i, (v, bar) in enumerate(zip(vals, bars)):
+            y_center = bar.get_y() + bar.get_height() / 2
+            ax.text(v + x_max * 0.02, y_center, f'{v:.2f}',
+                    va='center', ha='left', fontsize=9.5,
+                    color='#222222',
+                    fontweight='bold' if i == best_idx else 'normal')
+
+        ax.set_xlim(0, x_max * 1.18)
+
+        # Remove all spines
         for spine in ['top', 'right', 'left']:
             ax.spines[spine].set_visible(False)
-        ax.spines['bottom'].set_color('#888888')
-        ax.spines['bottom'].set_linewidth(0.6)
-        ax.tick_params(axis='y', length=0)  # no y ticks
-        ax.tick_params(axis='x', colors='#555555', labelsize=9)
-        ax.set_xlim(0, max(vals) * 1.18)
-
-        # Add small "best" annotation
-        ax.annotate('★', xy=(vals[best_idx], best_idx),
-                    xytext=(vals[best_idx] - max(vals) * 0.08, best_idx - 0.35),
-                    fontsize=11, color=best_color, ha='center', fontweight='bold')
+        ax.spines['bottom'].set_color('#AAAAAA')
+        ax.spines['bottom'].set_linewidth(0.5)
+        ax.tick_params(axis='y', length=0)
+        ax.tick_params(axis='x', colors='#666666', labelsize=9)
+        # Subtle x gridlines
+        ax.grid(axis='x', alpha=0.3, linestyle='-', linewidth=0.4,
+                color='#DDDDDD')
+        ax.set_axisbelow(True)
 
     plt.tight_layout(w_pad=2.5)
     plt.savefig(save_path, dpi=150, bbox_inches='tight')
     plt.close()
-    print(f"  指标 Lollipop 图: {save_path}")
+    print(f"  指标柱状图: {save_path}")
 
 
 def main(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
