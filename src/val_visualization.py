@@ -61,33 +61,72 @@ def get_model_predictions_at_val(gravity_15s, val_points, lon_hr, lat_hr):
 
 
 def plot_scatter(val_truth, predictions, method_names, save_path):
-    """散点图: 模型值 vs 船载真值."""
-    n = len(method_names)
-    fig, axes = plt.subplots(1, n, figsize=(5 * n, 5))
-    if n == 1:
-        axes = [axes]
-    rng = [min(val_truth.min(), min(p.min() for p in predictions)),
-           max(val_truth.max(), max(p.max() for p in predictions))]
-    for ax, pred, name in zip(axes, predictions, method_names):
-        valid = ~(np.isnan(pred) | np.isnan(val_truth))
-        p, t = pred[valid], val_truth[valid]
-        ax.scatter(t, p, s=2, alpha=0.3, c='steelblue')
-        ax.plot(rng, rng, 'r--', lw=1.5, label='y=x (完美对应)')
+    """散点图: 船载真值 (x) vs 各方法模型值 (y), 叠加各方法回归线.
+
+    解读:
+      - 散点底图为卡尔曼滤波预测 (代表性最强), 颜色密度反映分布
+      - 各方法回归线 (pred = a*truth + b) 显示偏差与增益:
+        * 线越贴近 y=x (黑色虚线) → 该方法无系统偏差
+        * 斜率 < 1 → 模型低估高值/高估低值 (平滑过度)
+        * 斜率 > 1 → 模型放大异常 (过拟合)
+      - 各方法散点几乎重合, 故只画一组底图; 差异通过回归线区分
+    """
+    fig, ax = plt.subplots(figsize=(9, 8))
+
+    # Determine common range
+    all_vals = [val_truth] + list(predictions)
+    rng = [min(np.nanmin(v) for v in all_vals),
+           max(np.nanmax(v) for v in all_vals)]
+    pad = (rng[1] - rng[0]) * 0.05
+    rng_plot = [rng[0] - pad, rng[1] + pad]
+
+    # Background scatter: use the best method (KF/卡尔曼滤波) as representative
+    # All methods' scatter points are nearly identical; differences show in regression lines
+    rep_idx = method_names.index('卡尔曼滤波') if '卡尔曼滤波' in method_names else 0
+    rep_pred = predictions[rep_idx]
+    valid = ~(np.isnan(rep_pred) | np.isnan(val_truth))
+    ax.scatter(val_truth[valid], rep_pred[valid],
+               s=2, alpha=0.25, c='lightgray', edgecolors='none',
+               label=f'验证点散点 (n={valid.sum():,})')
+
+    # y=x reference line
+    ax.plot(rng_plot, rng_plot, 'k--', lw=1.5, alpha=0.7, label='y = x (完美对应)')
+
+    # Regression line for each method
+    colors = ['tab:red', 'tab:blue', 'tab:green', 'tab:purple', 'tab:orange']
+    markers = ['-', '-', '-', '-', '-']
+    for pred, name, c, ls in zip(predictions, method_names, colors, markers):
+        v = ~(np.isnan(pred) | np.isnan(val_truth))
+        t, p = val_truth[v], pred[v]
+        # Linear regression: p = a*t + b
+        A = np.column_stack([t, np.ones_like(t)])
+        a, b = np.linalg.lstsq(A, p, rcond=None)[0]
+        # R²
+        ss_res = np.sum((p - (a * t + b)) ** 2)
+        ss_tot = np.sum((p - p.mean()) ** 2)
+        r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0
         rmse = np.sqrt(np.mean((p - t) ** 2))
-        bias = np.mean(p - t)
-        corr = np.corrcoef(p, t)[0, 1]
-        ax.set_xlabel('船载重力 FAA (mGal) — 真值')
-        ax.set_ylabel('模型 FAA (mGal)')
-        ax.set_title(f'{name}\nRMSE={rmse:.2f}  Bias={bias:.2f}  R={corr:.4f}')
-        ax.legend(loc='upper left', fontsize=9)
-        ax.set_xlim(rng)
-        ax.set_ylim(rng)
-        ax.set_aspect('equal')
-        ax.grid(alpha=0.3)
+        # Plot regression line
+        x_line = np.array(rng_plot)
+        y_line = a * x_line + b
+        ax.plot(x_line, y_line, ls, lw=2.2, color=c, alpha=0.9,
+                label=f'{name}: y={a:.3f}x{b:+.2f}, R²={r2:.4f}, RMSE={rmse:.2f}')
+
+    ax.set_xlim(rng_plot)
+    ax.set_ylim(rng_plot)
+    ax.set_aspect('equal')
+    ax.set_xlabel('船载重力 FAA (mGal) — 真值', fontsize=11)
+    ax.set_ylabel('模型 FAA (mGal)', fontsize=11)
+    ax.set_title('15'' 模型 vs 船载真值: 散点 + 各方法回归线\n'
+                 '(散点为卡尔曼滤波预测, 回归线显示各方法系统偏差与增益)',
+                 fontsize=11)
+    ax.legend(loc='upper left', fontsize=9, framealpha=0.9)
+    ax.grid(alpha=0.3, linestyle=':')
+
     plt.tight_layout()
     plt.savefig(save_path, dpi=150, bbox_inches='tight')
     plt.close()
-    print(f"  散点图: {save_path}")
+    print(f"  散点+回归线图: {save_path}")
 
 
 def plot_error_hist(val_truth, predictions, method_names, save_path):
@@ -430,7 +469,7 @@ def plot_error_vs_distance(train_points, val_points, predictions, method_names, 
 
 
 def plot_metrics_bar(val_truth, predictions, method_names, save_path):
-    """多指标柱状图对比: 均方根误差 / 平均绝对误差 / 最大误差."""
+    """科研风格横向柱状图对比: 均方根误差 / 平均绝对误差 / 最大误差."""
     metrics = {name: {} for name in method_names}
     for name, pred in zip(method_names, predictions):
         valid = ~(np.isnan(pred) | np.isnan(val_truth))
@@ -445,27 +484,59 @@ def plot_metrics_bar(val_truth, predictions, method_names, save_path):
     n_metrics = len(metric_names)
     n_methods = len(method_names)
 
-    fig, axes = plt.subplots(1, n_metrics, figsize=(4 * n_metrics, 5))
-    colors = ['tab:red', 'tab:blue', 'tab:green', 'tab:purple', 'tab:orange']
+    # Scientific style: muted colormap, no chart border, light gridlines
+    with plt.style.context('seaborn-v0_8-whitegrid'):
+        fig, axes = plt.subplots(1, n_metrics, figsize=(4.5 * n_metrics, 4.5),
+                                  sharey=False)
+        if n_metrics == 1:
+            axes = [axes]
+        # Colorblind-friendly palette
+        palette = ['#4C72B0', '#DD8452', '#55A467', '#C44E52', '#8172B3']
 
-    for ax, mname, mkey in zip(axes, metric_names, metric_keys):
-        vals = [metrics[name][mkey] for name in method_names]
-        bars = ax.bar(range(n_methods), vals, color=colors[:n_methods],
-                       edgecolor='black', linewidth=0.5, alpha=0.85)
-        ax.set_xticks(range(n_methods))
-        ax.set_xticklabels(method_names, rotation=15, fontsize=9)
-        ax.set_ylabel(f'{mname} (mGal)')
-        ax.set_title(mname)
-        ax.grid(alpha=0.3, axis='y', linestyle=':')
-        # Highlight best (min for all metrics)
-        best_idx = int(np.argmin(vals))
-        bars[best_idx].set_edgecolor('green')
-        bars[best_idx].set_linewidth(2.5)
-        for i, v in enumerate(vals):
-            ax.text(i, v + max(vals) * 0.02, f'{v:.2f}',
-                    ha='center', va='bottom', fontsize=9,
-                    fontweight='bold' if i == best_idx else 'normal')
-        ax.set_ylim(0, max(vals) * 1.15)
+        for ax, mname, mkey in zip(axes, metric_names, metric_keys):
+            vals = [metrics[name][mkey] for name in method_names]
+            best_idx = int(np.argmin(vals))
+            # Color: best gets highlighted, others muted
+            colors = [palette[i % len(palette)] for i in range(n_methods)]
+            colors[best_idx] = '#2CA02C'  # green for best
+
+            y_pos = np.arange(n_methods)
+            bars = ax.barh(y_pos, vals, color=colors, edgecolor='black',
+                            linewidth=0.6, height=0.55, alpha=0.92)
+
+            # Reverse y-axis so best method (lowest value) appears at top
+            ax.invert_yaxis()
+            ax.set_yticks(y_pos)
+            ax.set_yticklabels(method_names, fontsize=10)
+            ax.set_xlabel(f'{mname} (mGal)', fontsize=10)
+            ax.set_title(mname, fontsize=11, fontweight='bold')
+
+            # Value labels at end of bars
+            x_max = max(vals)
+            for i, (v, bar) in enumerate(zip(vals, bars)):
+                offset = x_max * 0.015
+                ax.text(v + offset, bar.get_y() + bar.get_height() / 2,
+                        f'{v:.2f}', va='center', ha='left', fontsize=9,
+                        fontweight='bold' if i == best_idx else 'normal',
+                        color='#2CA02C' if i == best_idx else 'black')
+                # Star marker for best
+                if i == best_idx:
+                    ax.text(v + offset, bar.get_y() + bar.get_height() / 2 - 0.32,
+                            '★ 最优', va='center', ha='left', fontsize=8,
+                            color='#2CA02C', fontweight='bold')
+
+            ax.set_xlim(0, x_max * 1.18)
+            # Remove top/right spines
+            for spine in ['top', 'right']:
+                ax.spines[spine].set_visible(False)
+            ax.tick_params(axis='both', which='both', length=0)
+            ax.grid(axis='x', alpha=0.4, linestyle='--')
+            ax.set_axisbelow(True)
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f"  指标柱状图: {save_path}")
     plt.tight_layout()
     plt.savefig(save_path, dpi=150, bbox_inches='tight')
     plt.close()
