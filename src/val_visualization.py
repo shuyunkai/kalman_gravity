@@ -169,6 +169,7 @@ def plot_track_profile(val_points, predictions, method_names, save_path):
 def plot_validation_region_map(train_points, val_points, lon_range, lat_range,
                                 bg_field, bg_lon, bg_lat, save_path):
     """验证区域地图: SSV 重力场为背景, 叠加训练/验证巡航航迹."""
+    from matplotlib.lines import Line2D
     fig, ax = plt.subplots(figsize=(11, 8))
 
     # Background: SSV gravity field (shows bathymetry-related gravity features
@@ -180,18 +181,16 @@ def plot_validation_region_map(train_points, val_points, lon_range, lat_range,
 
     # Plot training cruises (light yellow, sparse, on top of background)
     ax.scatter(train_points[:, 0], train_points[:, 1],
-               s=0.5, c='yellow', alpha=0.35, edgecolors='none',
-               label=f'训练巡航 (30 个, n={len(train_points):,})')
+               s=0.5, c='yellow', alpha=0.35, edgecolors='none')
 
     # Plot validation cruise MR22-04 (black, prominent)
     ax.scatter(val_points[:, 0], val_points[:, 1],
-               s=0.8, c='black', alpha=0.7, edgecolors='none',
-               label=f'验证巡航 MR22-04 (n={len(val_points):,})')
+               s=0.8, c='black', alpha=0.7, edgecolors='none')
 
     # Region boundary
     rect_x = [lon_range[0], lon_range[1], lon_range[1], lon_range[0], lon_range[0]]
     rect_y = [lat_range[0], lat_range[0], lat_range[1], lat_range[1], lat_range[0]]
-    ax.plot(rect_x, rect_y, 'c--', lw=1.5, alpha=0.8, label='验证区域边界')
+    ax.plot(rect_x, rect_y, 'c--', lw=1.5, alpha=0.8)
 
     ax.set_xlim(lon_range[0] - 0.5, lon_range[1] + 0.5)
     ax.set_ylim(lat_range[0] - 0.5, lat_range[1] + 0.5)
@@ -201,7 +200,20 @@ def plot_validation_region_map(train_points, val_points, lon_range, lat_range,
                  f'经度 [{lon_range[0]}°E - {lon_range[1]}°E], '
                  f'纬度 [{lat_range[0]}°N - {lat_range[1]}°N]\n'
                  f'训练: 30 个巡航 (黄)  |  验证: MR22-04 (黑, 完全独立未参与训练)')
-    ax.legend(loc='lower left', fontsize=10, framealpha=0.9)
+
+    # Build explicit legend handles with line markers (so colors are clearly visible)
+    legend_handles = [
+        Line2D([0], [0], marker='o', color='w', markerfacecolor='yellow',
+               markeredgecolor='black', markersize=8, alpha=0.9,
+               label=f'训练巡航 (30 个, n={len(train_points):,})'),
+        Line2D([0], [0], marker='o', color='w', markerfacecolor='black',
+               markeredgecolor='black', markersize=8, alpha=0.9,
+               label=f'验证巡航 MR22-04 (n={len(val_points):,})'),
+        Line2D([0], [0], linestyle='--', color='cyan', linewidth=1.5,
+               label='验证区域边界'),
+    ]
+    ax.legend(handles=legend_handles, loc='lower left', fontsize=10,
+              framealpha=0.9)
     ax.grid(alpha=0.3, linestyle=':')
     ax.set_aspect('equal', adjustable='box')
 
@@ -225,8 +237,7 @@ def plot_validation_region_map(train_points, val_points, lon_range, lat_range,
             '验证区域特点:\n'
             '- 含日本海沟 (海沟最深 ~10km)\n'
             '- 重力场变化剧烈 (蓝色负异常带)\n'
-            '- 含海陆边界与岛弧\n'
-            '- 是模型精度的严苛测试场',
+            '- 含海陆边界与岛弧',
             fontsize=9, ha='left', va='top',
             bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.9),
             transform=ax.transData)
