@@ -224,11 +224,12 @@ def plot_validation_region_map(train_points, val_points, lon_range, lat_range,
                 arrowprops=dict(arrowstyle='->', color='darkred', lw=1.5),
                 bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
                           edgecolor='darkred', alpha=0.9))
-    # Annotate the validation cruise
+    # Annotate the validation cruise — point to MR22-04's north leg
+    # (training cruises are sparse there, so arrow clearly hits the black track)
     ax.annotate('MR22-04\n(R/V Mirai, 2022)',
-                xy=(141.5, 35.0), xytext=(141.0, 31.0),
+                xy=(143.5, 39.2), xytext=(147.5, 40.0),
                 fontsize=9, ha='center', color='black',
-                arrowprops=dict(arrowstyle='->', color='black', lw=1),
+                arrowprops=dict(arrowstyle='->', color='black', lw=1.2),
                 bbox=dict(boxstyle='round,pad=0.3', facecolor='lightyellow',
                           edgecolor='black', alpha=0.9))
 
