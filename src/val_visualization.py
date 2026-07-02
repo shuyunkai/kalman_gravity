@@ -475,68 +475,57 @@ def plot_metrics_bar(val_truth, predictions, method_names, save_path):
         valid = ~(np.isnan(pred) | np.isnan(val_truth))
         p, t = pred[valid], val_truth[valid]
         diff = p - t
-        metrics[name]['均方根误差'] = np.sqrt(np.mean(diff ** 2))
-        metrics[name]['平均绝对误差'] = np.mean(np.abs(diff))
-        metrics[name]['最大误差'] = np.max(np.abs(diff))
+        metrics[name]['均方根误差'] = float(np.sqrt(np.mean(diff ** 2)))
+        metrics[name]['平均绝对误差'] = float(np.mean(np.abs(diff)))
+        metrics[name]['最大误差'] = float(np.max(np.abs(diff)))
 
     metric_names = ['均方根误差 (RMSE)', '平均绝对误差 (MAE)', '最大误差 (Max|e|)']
     metric_keys = ['均方根误差', '平均绝对误差', '最大误差']
     n_metrics = len(metric_names)
     n_methods = len(method_names)
 
-    # Scientific style: muted colormap, no chart border, light gridlines
-    with plt.style.context('seaborn-v0_8-whitegrid'):
-        fig, axes = plt.subplots(1, n_metrics, figsize=(4.5 * n_metrics, 4.5),
-                                  sharey=False)
-        if n_metrics == 1:
-            axes = [axes]
-        # Colorblind-friendly palette
-        palette = ['#4C72B0', '#DD8452', '#55A467', '#C44E52', '#8172B3']
+    fig, axes = plt.subplots(1, n_metrics, figsize=(4.5 * n_metrics, 4.5))
+    if n_metrics == 1:
+        axes = [axes]
 
-        for ax, mname, mkey in zip(axes, metric_names, metric_keys):
-            vals = [metrics[name][mkey] for name in method_names]
-            best_idx = int(np.argmin(vals))
-            # Color: best gets highlighted, others muted
-            colors = [palette[i % len(palette)] for i in range(n_methods)]
-            colors[best_idx] = '#2CA02C'  # green for best
+    # Colorblind-friendly palette
+    palette = ['#4C72B0', '#DD8452', '#55A467', '#C44E52', '#8172B3']
 
-            y_pos = np.arange(n_methods)
-            bars = ax.barh(y_pos, vals, color=colors, edgecolor='black',
-                            linewidth=0.6, height=0.55, alpha=0.92)
+    for ax, mname, mkey in zip(axes, metric_names, metric_keys):
+        vals = [metrics[name][mkey] for name in method_names]
+        best_idx = int(np.argmin(vals))
+        colors = [palette[i % len(palette)] for i in range(n_methods)]
+        colors[best_idx] = '#2CA02C'  # green for best
 
-            # Reverse y-axis so best method (lowest value) appears at top
-            ax.invert_yaxis()
-            ax.set_yticks(y_pos)
-            ax.set_yticklabels(method_names, fontsize=10)
-            ax.set_xlabel(f'{mname} (mGal)', fontsize=10)
-            ax.set_title(mname, fontsize=11, fontweight='bold')
+        y_pos = np.arange(n_methods)
+        bars = ax.barh(y_pos, vals, color=colors, edgecolor='black',
+                        linewidth=0.6, height=0.55, alpha=0.92)
 
-            # Value labels at end of bars
-            x_max = max(vals)
-            for i, (v, bar) in enumerate(zip(vals, bars)):
-                offset = x_max * 0.015
-                ax.text(v + offset, bar.get_y() + bar.get_height() / 2,
-                        f'{v:.2f}', va='center', ha='left', fontsize=9,
-                        fontweight='bold' if i == best_idx else 'normal',
-                        color='#2CA02C' if i == best_idx else 'black')
-                # Star marker for best
-                if i == best_idx:
-                    ax.text(v + offset, bar.get_y() + bar.get_height() / 2 - 0.32,
-                            '★ 最优', va='center', ha='left', fontsize=8,
-                            color='#2CA02C', fontweight='bold')
+        ax.invert_yaxis()
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(method_names, fontsize=10)
+        ax.set_xlabel(f'{mname} (mGal)', fontsize=10)
+        ax.set_title(mname, fontsize=11, fontweight='bold')
 
-            ax.set_xlim(0, x_max * 1.18)
-            # Remove top/right spines
-            for spine in ['top', 'right']:
-                ax.spines[spine].set_visible(False)
-            ax.tick_params(axis='both', which='both', length=0)
-            ax.grid(axis='x', alpha=0.4, linestyle='--')
-            ax.set_axisbelow(True)
+        x_max = max(vals)
+        for i, (v, bar) in enumerate(zip(vals, bars)):
+            offset = x_max * 0.015
+            y_center = bar.get_y() + bar.get_height() / 2
+            ax.text(v + offset, y_center,
+                    f'{v:.2f}', va='center', ha='left', fontsize=9,
+                    fontweight='bold' if i == best_idx else 'normal',
+                    color='#2CA02C' if i == best_idx else 'black')
+            if i == best_idx:
+                ax.text(v + offset, y_center - 0.32,
+                        '★ 最优', va='center', ha='left', fontsize=8,
+                        color='#2CA02C', fontweight='bold')
 
-    plt.tight_layout()
-    plt.savefig(save_path, dpi=150, bbox_inches='tight')
-    plt.close()
-    print(f"  指标柱状图: {save_path}")
+        ax.set_xlim(0, x_max * 1.22)
+        for spine in ['top', 'right']:
+            ax.spines[spine].set_visible(False)
+        ax.grid(axis='x', alpha=0.35, linestyle='--')
+        ax.set_axisbelow(True)
+
     plt.tight_layout()
     plt.savefig(save_path, dpi=150, bbox_inches='tight')
     plt.close()

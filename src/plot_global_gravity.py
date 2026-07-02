@@ -131,48 +131,13 @@ def plot_global_gravity(save_path, lat_min=-80, lat_max=80,
     ax.set_ylim(lat_min, lat_max)
     ax.set_xlabel('经度 (°E)', fontsize=11)
     ax.set_ylabel('纬度 (°N)', fontsize=11)
-    ax.set_title('全球 15" 卡尔曼滤波重力场模型\n'
-                 'KF 融合: SSV33.1 卫星测高 + 全球船载重力  '
-                 '(1\' KF → 真正上采样至 15" 已保存 NetCDF)',
-                 fontsize=12, pad=12)
+    ax.set_title('15" 模型', fontsize=14, pad=10)
 
     ax.set_xticks(np.arange(-180, 181, 30))
     ax.set_yticks(np.arange(-80, 81, 20))
     ax.grid(alpha=0.35, color='gray', linestyle=':', linewidth=0.5)
     ax.tick_params(labelsize=9)
     ax.set_aspect('equal', adjustable='box')
-
-    annotations = [
-        ('日本海沟', 142, 36, 155, 25),
-        ('马里亚纳海沟', 148, 15, 170, 30),
-        ('东太平洋海丘', -115, -25, -90, -50),
-        ('大西洋中洋脊', -30, 0, -60, -30),
-        ('印度洋海岭', 65, -25, 80, -50),
-        ('夏威夷海岭', -155, 20, -130, 45),
-    ]
-    for label, xy_lon, xy_lat, txt_lon, txt_lat in annotations:
-        ax.annotate(label,
-                    xy=(xy_lon, xy_lat),
-                    xytext=(txt_lon, txt_lat),
-                    fontsize=8, color='black', ha='center',
-                    arrowprops=dict(arrowstyle='->', color='black', lw=0.7, alpha=0.7),
-                    bbox=dict(boxstyle='round,pad=0.2', facecolor='white',
-                              edgecolor='black', alpha=0.75))
-
-    stats_text = (
-        f"统计信息:\n"
-        f"  均值: {np.nanmean(grav_f32):.2f} mGal\n"
-        f"  标准差: {np.nanstd(grav_f32):.2f} mGal\n"
-        f"  范围: [{np.nanmin(grav_f32):.1f}, {np.nanmax(grav_f32):.1f}]\n"
-        f"  原始: 1\' KF (9600×21600)\n"
-        f"  15'' NetCDF: 已生成 (38400×86400)\n"
-        f"  上采样用时: {t_zoom:.0f}s\n"
-        f"  覆盖: lon[-180, 180], lat[-80, 80]"
-    )
-    ax.text(0.012, 0.015, stats_text, transform=ax.transAxes,
-            fontsize=8.5, va='bottom', ha='left',
-            bbox=dict(boxstyle='round,pad=0.5', facecolor='white',
-                      edgecolor='gray', alpha=0.92))
 
     plt.tight_layout()
     plt.savefig(save_path, dpi=200, bbox_inches='tight')
