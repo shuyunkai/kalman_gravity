@@ -38,7 +38,7 @@ VAL_CRUISES = [
 
 
 def run_multi_cruise_val(lon_range=(132, 152), lat_range=(26, 42),
-                         upscale=4, alpha=0.5):
+                         upscale=4, alpha=0.2):
     print("=" * 70)
     print("  M2 多航次独立验证 — 5 条 MR/KS 系列航次")
     print("=" * 70)
@@ -198,4 +198,9 @@ def run_multi_cruise_val(lon_range=(132, 152), lat_range=(26, 42),
 
 
 if __name__ == "__main__":
-    run_multi_cruise_val()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--alpha", type=float, default=0.2,
+                        help="M2 地形先验权重 (默认 0.2, 20°×16° 最优)")
+    args = parser.parse_args()
+    run_multi_cruise_val(alpha=args.alpha)
