@@ -145,6 +145,50 @@ def bandpass_filter(data, dx_km, lam_min=None, lam_max=None):
     return filtered
 
 
+def radial_power_spectrum(data, dx_arcmin, n_bins=50):
+    """径向功率谱 (1D), log-spaced k bins.
+
+    Args:
+        data: 2D array
+        dx_arcmin: 网格间距 (弧分). 15'' = 0.25 arcmin, 1' = 1.0 arcmin
+        n_bins: log-spaced k bins 数量
+
+    Returns:
+        k_centers: 波数中心 (周期/弧分), 1D array
+        psd: 功率谱密度, 1D array
+        wavelengths_km: 对应波长 (km), 1D array
+    """
+    from numpy.fft import fft2, fftfreq
+
+    data = np.nan_to_num(data, nan=0.0)
+    f = fft2(data)
+    psd = np.abs(f) ** 2
+    ny, nx = psd.shape
+    ky = fftfreq(ny, dx_arcmin)
+    kx = fftfreq(nx, dx_arcmin)
+    k = np.sqrt(kx[np.newaxis, :]**2 + ky[:, np.newaxis]**2)
+    k_flat = k.ravel()
+    psd_flat = psd.ravel()
+
+    k_min = k_flat[k_flat > 0].min()
+    k_max = k_flat.max()
+    bins = np.logspace(np.log10(k_min), np.log10(k_max), n_bins + 1)
+
+    k_centers = []
+    psd_mean = []
+    for b0, b1 in zip(bins[:-1], bins[1:]):
+        mask = (k_flat >= b0) & (k_flat < b1)
+        if mask.sum() > 0:
+            k_centers.append(np.sqrt(b0 * b1))  # geometric mean
+            psd_mean.append(psd_flat[mask].mean())
+
+    k_centers = np.array(k_centers)
+    psd_mean = np.array(psd_mean)
+    # 波长 (km): 1 arcmin ≈ 1.855 km, wavelength = 1/k (弧分) × 1.855 km/弧分
+    wavelengths_km = 1.0 / k_centers * 1.855
+    return k_centers, psd_mean, wavelengths_km
+
+
 def interpolate_nans(data, method="nearest"):
     """用最近邻插值填充数据中的 NaN 值。"""
     mask = np.isnan(data)
