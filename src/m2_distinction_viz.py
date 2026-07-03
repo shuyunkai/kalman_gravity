@@ -106,7 +106,7 @@ def fig2_power_spectrum(models, data, save_png):
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlabel('波长 (km)', fontsize=12)
-    ax.set_ylabel('功率谱密度 (mGal²·km)', fontsize=12)
+    ax.set_ylabel('功率谱密度 (mGal^2·km)', fontsize=12)
     ax.set_title(f'径向功率谱对比 — 15'' 重力场\n'
                  f'M2 在 10-50km 频段功率高于双线性 (地形先验引入了物理高频信息)',
                  fontsize=12)
@@ -121,10 +121,11 @@ def fig2_power_spectrum(models, data, save_png):
 
     # 输出 10-50km 频段功率积分
     print(f"    10-50km 频段功率积分:")
+    trapezoid = getattr(np, 'trapezoid', None) or np.trapz
     for name, (k, psd, wl) in psd_data.items():
         mask = (wl >= 10) & (wl <= 50)
         if mask.sum() > 0:
-            integ = np.trapz(psd[mask], wl[mask])
+            integ = trapezoid(psd[mask], wl[mask])
             print(f"      {name:<22}: {integ:.4f}")
 
 
