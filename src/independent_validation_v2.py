@@ -24,7 +24,6 @@ import xarray as xr
 sys.path.insert(0, str(Path(__file__).parent))
 
 from run_pipeline import load_ssv_region, NC_ENGINE, DATA_DIR
-from kriging_baseline import _residual_to_faa, _subsample_train_points
 from kalman_gravity import KalmanGravityReconstructor
 from utils import compute_metrics
 

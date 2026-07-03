@@ -1,23 +1,16 @@
-"""区域真实数据管线：加载 SSV+GEBCO+船载数据 → KF重力重建 → KF水深反演。"""
-import sys, os, time, gzip, tempfile, re
+"""区域数据加载器: SSV33.1 卫星重力 + GEBCO 海底地形 + 船载重力.
+
+仅保留加载函数, KF 重建逻辑在 kf_novel.py (BathyPriorKF).
+"""
+import sys
 from pathlib import Path
 
 import numpy as np
-import netCDF4 as nc
 import xarray as xr
-from scipy.ndimage import zoom, gaussian_filter
-from scipy.interpolate import griddata
-import matplotlib
-matplotlib.use("Agg")  # 非交互式后端, 用于服务器/批处理生成图片
-import matplotlib.pyplot as plt
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from kalman_gravity import KalmanGravityReconstructor, KalmanBathymetryInverter
-from utils import (compute_metrics, print_metrics, plot_gravity_field,
-                   plot_bathymetry, plot_residual, plot_scatter_compare,
-                   plot_error_histogram, interpolate_nans, bandpass_filter, compute_vgg,
-                   split_shipborne_mask, read_gmt_grd, quality_control_shipborne)
+from utils import read_gmt_grd
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 OUTPUT_DIR = Path(__file__).parent.parent / "output_real"
@@ -72,14 +65,13 @@ def load_ssv_region(lon_range, lat_range, load_vgg=False):
 
 
 def load_gebco_region(lon_range, lat_range):
-    """加载指定区域的 GEBCO sub-ice 海底地形。"""
+    """加载指定区域的 GEBCO sub_ice 海底地形。"""
     gebco_path = DATA_DIR / "gebco" / "GEBCO_2026_sub_ice" / "GEBCO_2026_sub_ice.nc"
     ds = xr.open_dataset(str(gebco_path), engine=NC_ENGINE)
 
     var_name = [v for v in ds.variables if len(ds[v].dims) >= 2][0]
     ds_var = ds[var_name]
 
-    # Handle 0-360 vs -180-180 longitude conversion
     ds_lon = ds.lon.values
     lon0, lon1 = lon_range[0], lon_range[1]
     if lon0 < 0 and ds_lon.min() >= 0:
@@ -88,7 +80,7 @@ def load_gebco_region(lon_range, lat_range):
 
     pad = 0.5
     bathy = ds_var.sel(lon=slice(lon0 - pad, lon1 + pad),
-                        lat=slice(lat_range[0] - pad, lat_range[1] + pad)).values
+                       lat=slice(lat_range[0] - pad, lat_range[1] + pad)).values
     lon_b = ds.lon.sel(lon=slice(lon0 - pad, lon1 + pad)).values
     lat_b = ds.lat.sel(lat=slice(lat_range[0] - pad, lat_range[1] + pad)).values
     ds.close()
@@ -96,7 +88,10 @@ def load_gebco_region(lon_range, lat_range):
 
 
 def load_shipborne_gravity(lon_grid, lat_grid):
-    """加载全部船载重力格网，格网化匹配目标经纬度。"""
+    """加载船载重力格网 (旧 data/shipborne/ 路径), 精确像素分配到目标网格。
+
+    注: 主流程已改用 jp_data/ 原始航次 (见 independent_validation_v2.load_all_cruises_split).
+    """
     ship_dir = DATA_DIR / "shipborne"
     gravity_points = []
     bathy_points = []
@@ -107,8 +102,8 @@ def load_shipborne_gravity(lon_grid, lat_grid):
         for f in list(cruise_dir.glob("*.grd.gz")) + list(cruise_dir.glob("*.grd")):
             fname = f.name.lower()
             is_gravity = any(kw in fname for kw in [
-                "faa", "free_air", "free-air", "_gravity", "residual", "maba", "rmba", "bouguer",
-                "ba."])
+                "faa", "free_air", "free-air", "_gravity", "residual",
+                "maba", "rmba", "bouguer", "ba."])
             is_bathy = any(kw in fname for kw in ["_mb", "bathy", "0.00025"])
 
             if not (is_gravity or is_bathy):
@@ -127,7 +122,6 @@ def load_shipborne_gravity(lon_grid, lat_grid):
 
                 valid = mask & ~np.isnan(data)
                 n_valid = valid.sum()
-                # Subsample if too many points (e.g., high-res bathymetry)
                 if n_valid > 500000:
                     step = max(1, n_valid // 500000)
                     idx_flat = np.where(valid.ravel())[0][::step]
@@ -159,289 +153,20 @@ def load_shipborne_gravity(lon_grid, lat_grid):
 
     if gravity_points:
         pts = np.vstack(gravity_points)
-        print(f"  Raw gravity points: {len(pts):,}")
-        # Vectorized exact pixel assignment
         j_idx = np.round((pts[:, 0] - lon_grid[0]) / (lon_grid[1] - lon_grid[0])).astype(int)
         i_idx = np.round((pts[:, 1] - lat_grid[0]) / (lat_grid[1] - lat_grid[0])).astype(int)
-        valid = (j_idx >= 0) & (j_idx < ship_grav.shape[1]) & (i_idx >= 0) & (i_idx < ship_grav.shape[0])
+        valid = (j_idx >= 0) & (j_idx < ship_grav.shape[1]) & \
+                (i_idx >= 0) & (i_idx < ship_grav.shape[0])
         ship_grav[i_idx[valid], j_idx[valid]] = pts[valid, 2]
-        print(f"  Gravity: {valid.sum():,} exact pixel assignments ({valid.sum()/len(pts)*100:.1f}%)")
+        print(f"  Gravity: {valid.sum():,} exact pixel assignments")
 
     if bathy_points:
         pts = np.vstack(bathy_points)
         j_idx = np.round((pts[:, 0] - lon_grid[0]) / (lon_grid[1] - lon_grid[0])).astype(int)
         i_idx = np.round((pts[:, 1] - lat_grid[0]) / (lat_grid[1] - lat_grid[0])).astype(int)
-        valid = (j_idx >= 0) & (j_idx < ship_bathy.shape[1]) & (i_idx >= 0) & (i_idx < ship_bathy.shape[0])
+        valid = (j_idx >= 0) & (j_idx < ship_bathy.shape[1]) & \
+                (i_idx >= 0) & (i_idx < ship_bathy.shape[0])
         ship_bathy[i_idx[valid], j_idx[valid]] = pts[valid, 2]
         print(f"  Bathymetry: {valid.sum():,} exact pixel assignments")
 
     return ship_grav, ship_bathy
-
-
-def run_pipeline(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
-    """完整管线：加载数据 → KF重力重建 → KF水深反演 → 评估+图表。"""
-    print("=" * 60)
-    print("  Kalman Filter Gravity Field Modeling - Real Data")
-    print("=" * 60)
-    print(f"  Region: lon=[{lon_range[0]}, {lon_range[1]}], lat=[{lat_range[0]}, {lat_range[1]}]")
-
-    print("\n[1/3] Loading SSV33.1 satellite data...")
-    gravity_lr, vgg_lr, lon_lr, lat_lr = load_ssv_region(lon_range, lat_range, load_vgg=True)
-    print(f"  Gravity: {gravity_lr.shape}")
-    if vgg_lr is not None:
-        print(f"  VGG loaded: shape={vgg_lr.shape} (reserved for spectral validation)")
-
-    print("\n[2/3] Loading GEBCO bathymetry...")
-    bathy_gebco, lon_b, lat_b = load_gebco_region(lon_range, lat_range)
-    print(f"  GEBCO: {bathy_gebco.shape}")
-
-    print("\n[3/3] Loading shipborne data...")
-    from scipy.ndimage import zoom as sp_zoom
-    ny_lr, nx_lr = gravity_lr.shape
-    ny_hr, nx_hr = ny_lr * upscale, nx_lr * upscale
-    lon_hr = np.linspace(lon_range[0], lon_range[1], nx_hr)
-    lat_hr = np.linspace(lat_range[0], lat_range[1], ny_hr)
-    ship_grav, ship_bathy = load_shipborne_gravity(lon_hr, lat_hr)
-    # Convert residual gravity → free-air with EGM2008 long-wave trend (>160km).
-    # Only applied when all loaded files are residual type (not already FAA).
-    # EGM2008 is an independent spherical harmonic model — using it avoids
-    # SSV's own processing artifacts in the trend restoration.
-    if ship_grav is not None:
-        ship_mask = ~np.isnan(ship_grav)
-        before_mean = np.nanmean(ship_grav[ship_mask])
-        is_residual = abs(before_mean) < 50  # residual has near-zero mean
-        if ship_mask.sum() > 0 and is_residual:
-            try:
-                ds_egm = xr.open_dataset(
-                    DATA_DIR / "icgem" / "grid" / "EGM2008_gravity_anomaly.nc",
-                    engine=NC_ENGINE)
-                vname = [v for v in ds_egm.variables if len(ds_egm[v].dims) >= 2][0]
-                grav_egm = ds_egm[vname].sel(
-                    lon=slice(lon_range[0], lon_range[1]),
-                    lat=slice(lat_range[1], lat_range[0])).values  # EGM2008 lat descending
-                ds_egm.close()
-                egm_trend = gaussian_filter(grav_egm, sigma=10)
-                from scipy.interpolate import RegularGridInterpolator
-                xi_egm = np.linspace(lon_range[0], lon_range[1], egm_trend.shape[1])
-                yi_egm = np.linspace(lat_range[1], lat_range[0], egm_trend.shape[0])
-                interp = RegularGridInterpolator(
-                    (yi_egm, xi_egm), egm_trend, bounds_error=False, fill_value=np.nan)
-                lon_lr2d, lat_lr2d = np.meshgrid(lon_lr, lat_lr)
-                egm_on_lr = interp(np.column_stack([lat_lr2d.ravel(), lon_lr2d.ravel()]))
-                egm_on_lr = egm_on_lr.reshape(gravity_lr.shape)
-                grav_lr_up = sp_zoom(egm_on_lr, (upscale, upscale), order=1)
-            except Exception as e:
-                print(f"  EGM2008 unavailable ({e}), falling back to SSV trend")
-                ssv_trend = gaussian_filter(gravity_lr, sigma=10)
-                grav_lr_up = sp_zoom(ssv_trend, (upscale, upscale), order=1)
-            ship_grav[ship_mask] = ship_grav[ship_mask] + grav_lr_up[ship_mask]
-            after_mean = np.nanmean(ship_grav[ship_mask])
-            print(f"  Residual→FAA (EGM2008 trend): mean {before_mean:.0f} → {after_mean:.0f} mGal "
-                  f"(trend added: {np.nanmean(grav_lr_up[ship_mask]):.0f} mGal)")
-        elif ship_mask.sum() > 0:
-            print(f"  Shipborne data already FAA (mean={before_mean:.0f} mGal), skip trend recovery")
-    n_ship = np.sum(~np.isnan(ship_grav)) if ship_grav is not None else 0
-    print(f"  Shipborne gravity points: {n_ship}")
-
-    # Load GEBCO TID for independent validation
-    print("\n[3b/6] Loading GEBCO TID type identifier...")
-    prior_mask_hr = None
-    val_mask_hr = None
-    try:
-        from real_data import load_gebco_tid, tid_to_multibeam_mask
-        tid_info = load_gebco_tid(region=(lon_range[0], lon_range[1],
-                                          lat_range[0], lat_range[1]))
-        tid_data = tid_info["tid"]
-        mb_mask = tid_to_multibeam_mask(tid_data)
-        # Upsample TID mask to HR grid
-        mb_mask_hr = sp_zoom(mb_mask.astype(float),
-                             (ny_hr / mb_mask.shape[0], nx_hr / mb_mask.shape[1]),
-                             order=0) > 0.5
-        # 70/30 split for prior/validation within multibeam regions
-        rng = np.random.default_rng(42)
-        mb_idx = np.where(mb_mask_hr.ravel())[0]
-        rng.shuffle(mb_idx)
-        n_prior = int(len(mb_idx) * 0.7)
-        prior_mask_hr = np.zeros(ny_hr * nx_hr, dtype=bool)
-        val_mask_hr = np.zeros(ny_hr * nx_hr, dtype=bool)
-        prior_mask_hr[mb_idx[:n_prior]] = True
-        val_mask_hr[mb_idx[n_prior:]] = True
-        prior_mask_hr = prior_mask_hr.reshape(ny_hr, nx_hr)
-        val_mask_hr = val_mask_hr.reshape(ny_hr, nx_hr)
-        print(f"  TID multibeam pixels: {len(mb_idx):,} "
-              f"(prior={n_prior:,}, validation={len(mb_idx)-n_prior:,})")
-    except (FileNotFoundError, KeyError) as e:
-        print(f"  TID not available: {e} — GEBCO prior will be unrestricted")
-
-    # Shipborne train/val split
-    ship_train_mask = None
-    ship_val_mask = None
-    if n_ship > 100:
-        ship_train_mask, ship_val_mask = split_shipborne_mask(
-            ship_grav, validation_fraction=0.2)
-        print(f"  Shipborne split: train={ship_train_mask.sum():,}, "
-              f"val={ship_val_mask.sum():,}")
-
-    print("\n[4/6] Kalman Filter Gravity Reconstruction...")
-    reconstructor = KalmanGravityReconstructor(
-        grid_shape=(ny_hr, nx_hr), region_size_deg=lat_range[1] - lat_range[0],
-        lr_grid_shape=(ny_lr, nx_lr))
-    reconstructor.initialize(
-        gravity_lr=gravity_lr, gravity_ship=ship_grav if n_ship > 0 else None,
-        ship_train_mask=ship_train_mask,
-        process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
-
-    t0 = time.time()
-    gravity_hr = reconstructor.run(n_iterations=6, smooth_sigma=15.0)
-    print(f"  Done in {time.time()-t0:.0f}s")
-
-    gravity_bilinear = zoom(gravity_lr, (upscale, upscale), order=1)
-
-    # Spectral validation: band-separated metrics
-    dx_km = (lat_range[1] - lat_range[0]) * 111.32 / ny_hr
-    grav_kf_long = bandpass_filter(gravity_hr, dx_km, lam_min=160)
-    grav_kf_mid = bandpass_filter(gravity_hr, dx_km, lam_min=20, lam_max=160)
-    grav_bi_long = bandpass_filter(gravity_bilinear, dx_km, lam_min=160)
-    grav_bi_mid = bandpass_filter(gravity_bilinear, dx_km, lam_min=20, lam_max=160)
-
-    print("\n[4b/6] Spectral band validation...")
-    print(f"  Long-wave (>160km) correlation KF vs bilinear: "
-          f"{np.corrcoef(grav_kf_long.ravel(), grav_bi_long.ravel())[0,1]:.4f}")
-    if ship_val_mask is not None and ship_val_mask.sum() > 100:
-        rmse_kf_mid = compute_metrics(grav_kf_mid, gravity_hr, mask=ship_val_mask)
-        print(f"  Mid-band (20-160km) energy fraction: "
-              f"{np.std(grav_kf_mid[ship_val_mask])/np.std(gravity_hr[ship_val_mask]):.3f}")
-
-    print("\n[5/6] Kalman Filter Bathymetry Inversion...")
-
-    # --- VGG validation (Plan A) ---
-    if vgg_lr is not None:
-        from utils import compute_vgg
-        vgg_kf = compute_vgg(gravity_hr, (lon_range[1] - lon_range[0]) / nx_hr,
-                             lat_center=(lat_range[0] + lat_range[1]) / 2.0)
-        vgg_lr_up = sp_zoom(vgg_lr, (upscale, upscale), order=1)
-        m_vgg = compute_metrics(vgg_kf, vgg_lr_up)
-        print(f"\n  [VGG Validation]")
-        print(f"  VGG RMSE: {m_vgg.get('RMSE', float('nan')):.2f} Eötvös  |  "
-              f"Corr: {m_vgg.get('Correlation', float('nan')):.3f}  |  "
-              f"Bias: {m_vgg.get('Bias', float('nan')):.2f} Eötvös")
-        # Report high-frequency difference specifically
-        vgg_diff = vgg_kf - vgg_lr_up
-        print(f"  VGG diff std: {np.nanstd(vgg_diff):.2f} Eötvös  "
-              f"(large → KF needs VGG constraint)")
-        if ship_val_mask is not None and ship_val_mask.sum() > 100:
-            ratio = np.nanstd(vgg_diff[ship_val_mask]) / np.nanstd(vgg_lr_up[ship_val_mask])
-            print(f"  VGG diff/signal ratio (ship val area): {ratio:.3f}  "
-                  f"({'HIGH — consider adding VGG constraint' if ratio > 0.5 else 'LOW — VGG constraint unnecessary'})")
-
-    inverter = KalmanBathymetryInverter(
-        grid_shape=(ny_hr, nx_hr), region_size_deg=lat_range[1] - lat_range[0],
-        lat_center=(lat_range[0] + lat_range[1]) / 2.0)
-
-    bathy_prior_hr = sp_zoom(bathy_gebco, (ny_hr / bathy_gebco.shape[0],
-                                            nx_hr / bathy_gebco.shape[1]), order=1)
-    inverter.depth_min = max(-11000, np.nanmin(bathy_prior_hr) - 500)
-    inverter.depth_max = min(1000, np.nanmax(bathy_prior_hr) + 500)
-
-    # Use data-driven Te from crustal age if available
-    try:
-        from real_data import load_age_grid
-        age_info = load_age_grid(region=(lon_range[0], lon_range[1],
-                                          lat_range[0], lat_range[1]))
-        inverter.apply_flexural_isostasy_from_age(age_info["age"])
-    except (FileNotFoundError, KeyError) as e:
-        print(f"  Age grid not available: {e} — using default Te=10 km")
-        inverter.apply_flexural_isostasy(Te=10e3)
-
-    inverter.initialize(gravity_reconstructed=gravity_hr,
-                        gravity_ship=ship_grav if n_ship > 0 else None,
-                        bathy_ship=ship_bathy, bathymetry_prior=bathy_prior_hr,
-                        prior_mask=prior_mask_hr,
-                        process_noise_std=80.0, observation_noise_std=5.0)
-
-    # Apply GlobSed sediment correction (must be after initialize)
-    try:
-        from real_data import load_globsed
-        globsed_info = load_globsed(region=(lon_range[0], lon_range[1],
-                                             lat_range[0], lat_range[1]))
-        inverter.apply_sediment_correction(globsed_info["thickness"], drho_sed=500)
-    except (FileNotFoundError, KeyError) as e:
-        print(f"  GlobSed not available: {e}")
-
-    bathymetry_kf = inverter.run(n_iterations=5, smooth_sigma=1.0)
-    bathymetry_trad = inverter.gravity_to_bathymetry_linear(
-        gravity_hr, k_min=2 * np.pi / 160000, k_max=2 * np.pi / 20000)
-
-    bathy_truth_hr = sp_zoom(bathy_gebco, (ny_hr / bathy_gebco.shape[0],
-                                            nx_hr / bathy_gebco.shape[1]), order=1)
-    m_g_kf = compute_metrics(gravity_hr, gravity_bilinear)
-    # Independent validation on TID=1 held-out pixels
-    if val_mask_hr is not None and val_mask_hr.sum() > 100:
-        m_b_kf = compute_metrics(bathymetry_kf, bathy_truth_hr, mask=val_mask_hr)
-        m_b_trad = compute_metrics(bathymetry_trad, bathy_truth_hr, mask=val_mask_hr)
-        val_tag = f"[TID=1 独立验证, n={val_mask_hr.sum():,}]"
-    else:
-        m_b_kf = compute_metrics(bathymetry_kf, bathy_truth_hr)
-        m_b_trad = compute_metrics(bathymetry_trad, bathy_truth_hr)
-        val_tag = "[所有 GEBCO 像素 — WARNING: 先验和验证同源, 结果非独立!]"
-
-    # Gravity validation on held-out shipborne
-    if ship_val_mask is not None and ship_val_mask.sum() > 100:
-        m_g_ship_val = compute_metrics(
-            gravity_hr, ship_grav, mask=ship_val_mask)
-    else:
-        m_g_ship_val = None
-
-    # Independent bathy validation on shipborne (never used in KF)
-    n_bathy_ship = np.sum(~np.isnan(ship_bathy)) if ship_bathy is not None else 0
-    m_b_kf_ship = None
-    m_b_trad_ship = None
-    if n_bathy_ship > 100:
-        mask_b = ~np.isnan(ship_bathy)
-        m_b_kf_ship = compute_metrics(bathymetry_kf[mask_b], ship_bathy[mask_b])
-        m_b_trad_ship = compute_metrics(bathymetry_trad[mask_b], ship_bathy[mask_b])
-
-    print("\n" + "=" * 60)
-    print("  RESULTS")
-    print("=" * 60)
-    print(f"  Gravity KF mean/std: {gravity_hr.mean():.1f} / {gravity_hr.std():.1f} mGal")
-    if m_g_ship_val:
-        m_bi_ship_val = compute_metrics(gravity_bilinear, ship_grav, mask=ship_val_mask)
-        impr = (1 - m_g_ship_val['RMSE'] / m_bi_ship_val['RMSE']) * 100 if m_bi_ship_val.get('RMSE', 0) > 0 else 0
-        print(f"  Gravity KF vs Ship (验证) RMSE: {m_g_ship_val['RMSE']:.1f} mGal  "
-              f"| Bilinear vs Ship: {m_bi_ship_val.get('RMSE', float('nan')):.1f} mGal  "
-              f"| KF改善: {impr:.0f}%  "
-              f"[n={m_g_ship_val.get('N', '?')}]")
-    print(f"  Bathymetry KF mean: {bathymetry_kf.mean():.0f} m")
-    print(f"  Bathymetry RMSE {val_tag}: {m_b_kf['RMSE']:.0f} m (KF) vs {m_b_trad['RMSE']:.0f} m (Parker)")
-    if m_b_kf_ship:
-        print(f"  Bathymetry RMSE vs 船载(独立): {m_b_kf_ship['RMSE']:.0f} m (KF) vs {m_b_trad_ship['RMSE']:.0f} m (Parker)")
-
-    plot_gravity_field(
-        [gravity_lr, gravity_hr, gravity_bilinear],
-        ["SSV33.1 (1')", "卡尔曼滤波 (15'')", "双线性插值 (15'')"],
-        save_path=OUTPUT_DIR / "real_gravity.png")
-    plot_bathymetry(
-        [bathy_prior_hr, bathymetry_kf, bathy_truth_hr],
-        ["GEBCO 先验", "卡尔曼滤波", "GEBCO 真值"],
-        save_path=OUTPUT_DIR / "real_bathymetry.png")
-    plot_residual(bathymetry_kf, bathy_truth_hr,
-                  title=f"水深残差 (RMSE={m_b_kf['RMSE']:.0f}m)",
-                  save_path=OUTPUT_DIR / "real_residual.png")
-
-    print(f"\nOutput saved to: {OUTPUT_DIR}")
-    return gravity_hr, bathymetry_kf
-
-
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--lon-min", type=float, default=140)
-    parser.add_argument("--lon-max", type=float, default=150)
-    parser.add_argument("--lat-min", type=float, default=30)
-    parser.add_argument("--lat-max", type=float, default=40)
-    parser.add_argument("--upscale", type=int, default=4)
-    args = parser.parse_args()
-
-    run_pipeline(lon_range=(args.lon_min, args.lon_max),
-                 lat_range=(args.lat_min, args.lat_max), upscale=args.upscale)

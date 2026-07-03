@@ -42,9 +42,8 @@ plt.rcParams["axes.unicode_minus"] = False
 
 from independent_validation_v2 import (
     load_all_cruises_split, assign_points_to_grid, VAL_CRUISE,
-    evaluate_15s_raw, JP_DATA_DIR)
+    JP_DATA_DIR)
 from run_pipeline import load_ssv_region
-from kriging_baseline import _subsample_train_points
 from freq_fusion_baseline import butterworth_2d_filter
 from kalman_gravity import KalmanGravityReconstructor
 from scipy.spatial import cKDTree
