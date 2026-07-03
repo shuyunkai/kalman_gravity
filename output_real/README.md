@@ -39,6 +39,14 @@ M2 与双线性/频域融合的本质区别在于**先验信息源**:
 - `m2_error_spatial.png` — 误差空间分布 (M2 误差更均匀)
 - `m2_error_vs_wavelength.png` — 分波段能量 (M2 在 10-50km 频段优势最大)
 
+### 综合精度对比 (6 张图)
+- `m2_accuracy_radar.png` — 综合精度雷达图 (5 维度: RMSE/MAE/STD/Max|e|/|Bias|)
+- `m2_scatter_density.png` — 散点密度图 (预测 vs 真值, hexbin + 回归线)
+- `m2_error_hist_qq.png` — 误差直方图 + QQ 图 (分布对比)
+- `m2_track_profile.png` — 沿 MR22-04 航迹剖面图 (重力剖面 + 误差剖面)
+- `m2_accuracy_summary.png` — 3 维度汇总 (单航次/4航次/大海域 × 3 方法)
+- `m2_improvement_breakdown.png` — 改善百分比分解 (按航次 × 方法)
+
 ### α 参数选择
 20°×16° 大区域最优 α=0.2 (vs 之前 10°×10° 的 α=0.5).
 - α=0: 纯 SSV, RMSE=3.784
@@ -65,9 +73,31 @@ python m2_distinction_viz.py --alpha 0.2
 # 阶段 6: 30°×24° 大海域 (10 分钟)
 python m2_large_region_val.py --alpha 0.2
 
+# 阶段 7: 综合精度对比 (3 分钟) — 6 张精度指标图
+python m2_accuracy_comprehensive.py --alpha 0.2
+
 # 单次 3 方法对比 (2 分钟)
 python compare_m2_traditional.py
 ```
+
+## 项目解算流程
+
+详见 [PIPELINE.md](PIPELINE.md) — 包含完整流程图、数学公式、关键参数说明.
+
+简述:
+1. **数据加载**: SSV 1' 卫星测高 + GEBCO 15'' 地形 + 日本船载 30+ 航次
+2. **数据预处理**: 船载点精确像素分配到 15'' 网格, 趋势恢复
+3. **M2 物理先验构建** (核心):
+   - SSV 1' 双线性上采样到 15'' (低频底色)
+   - GEBCO 水深 → 布格重力异常 (2πGρh × 1e5)
+   - 布格高通滤波 (cutoff=5.5km)
+   - 先验 = SSV + α × bathy_hp (α=0.2)
+4. **卡尔曼滤波后验修正**:
+   - 状态: 15'' 高分辨率格网 (18.4M 像素)
+   - 观测1: 卫星 1' 块均值约束 (R_sat=9)
+   - 观测2: 船载点观测 (R_ship=1)
+   - 6 次 predict-update 迭代 + RTS 后向平滑
+5. **独立验证**: MR22-04 等 4 条独立航次 + 多尺度区域
 
 ## 数据源
 
