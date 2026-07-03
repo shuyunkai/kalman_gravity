@@ -501,3 +501,58 @@ class WaveletKF:
 
         gravity_15s = self._reconstruct(self._flat_to_coeffs(x, shapes, detail_shapes))
         return gravity_15s
+
+
+# ============================================================
+# Method 5: 纯 KF (零初值, 不用 SSV 双线性)
+# ============================================================
+
+class PureKF:
+    """纯 KF: 状态零初值, 不使用 SSV 双线性插值.
+
+    数学形式:
+      x_0 = 0 (零向量, 不继承 SSV 双线性结构)
+      观测1: 卫星块均值约束 — 每 4x4 块均值收敛到 SSV 1' 值
+      观测2: 船载点观测 — 在船载位置注入真值
+      过程: 空间高斯平滑 — 在网格上传播信息
+
+    与双线性本质区别:
+      - 双线性: 4x4 块内双线性插值, 制造虚假高频结构
+      - 纯 KF: 4x4 块内初值为零, 由卫星块均值约束 + 船载点 + 空间传播
+        共同后验估计, 不继承双线性结构
+      - 是与双线性最干净的对比对象: 同样的 SSV + 船载输入, 不一样的处理方式
+    """
+
+    def __init__(self, hr_grid_shape, lr_grid_shape, region_size_deg,
+                 process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0):
+        self.hr_shape = hr_grid_shape
+        self.lr_shape = lr_grid_shape
+        self.region_size_deg = region_size_deg
+        self.Q = process_noise_std ** 2
+        self.R_sat = sat_noise_std ** 2
+        self.R_ship = ship_noise_std ** 2
+
+    def build(self, gravity_lr, ship_15s, train_mask, lon_hr, lat_hr,
+              lon_range, lat_range, upscale=4, n_iter=8, smooth_sigma=15.0):
+        """注意: n_iter 默认 8 (比双线性先验 KF 多 2 次), 因零初值需要更多迭代收敛."""
+        ny_hr, nx_hr = self.hr_shape
+        r = KalmanGravityReconstructor(
+            grid_shape=self.hr_shape,
+            region_size_deg=self.region_size_deg,
+            lr_grid_shape=self.lr_shape)
+        # 关键: 零初值, 不用 zoom(gravity_lr, ...) 双线性
+        r._initialized = True
+        r.ny, r.nx = ny_hr, nx_hr
+        r.n_state = ny_hr * nx_hr
+        r.x = np.zeros(r.n_state)  # 零初值!
+        r.P_diag = self.Q * np.ones(r.n_state)
+        r.Q_diag = self.Q * np.ones(r.n_state)
+        r.R_sat_val = self.R_sat
+        r.R_ship_val = self.R_ship
+        r.gravity_lr = gravity_lr  # 卫星块均值约束仍用 SSV
+        r.gravity_ship = ship_15s
+        r.ship_train_mask = train_mask
+        r._iter_count = 0
+        print(f"    [PureKF] 零初值, n_iter={n_iter}, smooth_sigma={smooth_sigma}")
+        gravity_15s = r.run(n_iterations=n_iter, smooth_sigma=smooth_sigma)
+        return gravity_15s

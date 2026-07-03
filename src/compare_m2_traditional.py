@@ -36,7 +36,7 @@ from independent_validation_v2 import (
 from run_pipeline import load_ssv_region, load_gebco_region
 from freq_fusion_baseline import butterworth_2d_filter
 from kalman_gravity import KalmanGravityReconstructor
-from kf_novel import BathyPriorKF
+from kf_novel import BathyPriorKF, PureKF
 from kriging_baseline import _subsample_train_points, _residual_to_faa
 
 OUTPUT_DIR = Path(__file__).parent.parent / "output_real"
@@ -241,9 +241,9 @@ def main(lon_range=(132, 152), lat_range=(26, 42), upscale=4):
         models['克里金+趋势面'] = None
         times['克里金+趋势面'] = time.time() - t0
 
-    # 4. 原始 KF (双线性先验)
+    # 4. 原始 KF (双线性先验) — 仅作参考, 与双线性有继承关系
     t0 = time.time()
-    print("\n  原始 KF (SSV 双线性先验)...")
+    print("\n  原始 KF (SSV 双线性先验, 仅参考)...")
     r_orig = KalmanGravityReconstructor(
         grid_shape=(ny_hr, nx_hr),
         region_size_deg=region_size,
@@ -252,9 +252,9 @@ def main(lon_range=(132, 152), lat_range=(26, 42), upscale=4):
         gravity_lr=gravity_lr, gravity_ship=ship_grav,
         ship_train_mask=train_mask,
         process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
-    models['原始KF'] = r_orig.run(n_iterations=6, smooth_sigma=15.0)
-    times['原始KF'] = time.time() - t0
-    print(f"  原始 KF: {times['原始KF']:.1f}s")
+    models['原始KF(双线性先验)'] = r_orig.run(n_iterations=6, smooth_sigma=15.0)
+    times['原始KF(双线性先验)'] = time.time() - t0
+    print(f"  原始 KF: {times['原始KF(双线性先验)']:.1f}s")
 
     # 5. M2 地形先验 KF
     t0 = time.time()
@@ -268,6 +268,19 @@ def main(lon_range=(132, 152), lat_range=(26, 42), upscale=4):
         upscale=upscale, bathy_15s=bathy_15s)
     times['M2 地形先验KF'] = time.time() - t0
     print(f"  M2: {times['M2 地形先验KF']:.1f}s")
+
+    # 6. 纯 KF (零初值, 不用 SSV 双线性) — 与双线性最干净的对比
+    t0 = time.time()
+    print("\n  纯 KF (零初值, 不继承双线性)...")
+    pkf = PureKF(
+        hr_grid_shape=(ny_hr, nx_hr), lr_grid_shape=(ny_lr, nx_lr),
+        region_size_deg=region_size)
+    models['纯KF(零初值)'] = pkf.build(
+        gravity_lr=gravity_lr, ship_15s=ship_grav, train_mask=train_mask,
+        lon_hr=lon_hr, lat_hr=lat_hr, lon_range=lon_range, lat_range=lat_range,
+        upscale=upscale, n_iter=8)
+    times['纯KF(零初值)'] = time.time() - t0
+    print(f"  纯 KF: {times['纯KF(零初值)']:.1f}s")
 
     # === 评估 ===
     print(f"\n[3/4] 独立验证 (MR22-04, n={len(val_points):,})...")
@@ -293,7 +306,8 @@ def main(lon_range=(132, 152), lat_range=(26, 42), upscale=4):
     # === 可视化 ===
     print("\n[4/4] 生成对比图...")
     n_methods = len(method_names)
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10), sharex=True, sharey=True)
+    # 3 行 × 3 列: 6 个方法场图 + 1 个柱状图 + 2 个空白
+    fig, axes = plt.subplots(2, 4, figsize=(22, 10), sharex=True, sharey=True)
     axes = axes.ravel()
 
     all_vals = np.concatenate([models[n].ravel() for n in method_names])
@@ -302,9 +316,10 @@ def main(lon_range=(132, 152), lat_range=(26, 42), upscale=4):
     norm = TwoSlopeNorm(vmin=-vmax, vcenter=0, vmax=vmax)
     extent = [lon_hr[0], lon_hr[-1], lat_hr[0], lat_hr[-1]]
 
-    # 找最优
-    best_name, best_m = min([(n, m) for n, m in metrics_rows],
-                              key=lambda x: x[1]['RMSE'])
+    # 找最优 (排除克里金这种失败的, 排除原始 KF 因其继承双线性)
+    candidates = [(n, m) for n, m in metrics_rows
+                    if '克里金' not in n and '原始KF' not in n and n != '双线性插值']
+    best_name, best_m = min(candidates, key=lambda x: x[1]['RMSE'])
 
     for ax, (name, m) in zip(axes, metrics_rows):
         is_best = (name == best_name)
@@ -333,9 +348,8 @@ def main(lon_range=(132, 152), lat_range=(26, 42), upscale=4):
                      fontweight='bold' if is_best else 'normal')
         ax.tick_params(labelsize=8)
 
-    # 第 6 个面板: RMSE 柱状图
-    ax_bar = axes[5]
-    ax_bar.axis('off')
+    # 第 7 个面板: RMSE 柱状图
+    ax_bar = axes[6]
     kf_names = [n for n, _ in metrics_rows if n != '双线性插值']
     rmses = [m['RMSE'] for n, m in metrics_rows if n != '双线性插值']
     if bi_rmse is None:
@@ -350,24 +364,49 @@ def main(lon_range=(132, 152), lat_range=(26, 42), upscale=4):
                     label=f'双线性 RMSE={bi_rmse:.2f}')
     ax_bar.invert_yaxis()
     ax_bar.set_yticks(y_pos)
-    ax_bar.set_yticklabels(kf_names, fontsize=9)
+    ax_bar.set_yticklabels(kf_names, fontsize=8.5)
     ax_bar.set_xlabel('RMSE (mGal)', fontsize=9)
     ax_bar.set_title('各方法 RMSE 对比', fontsize=10, fontweight='bold')
     for i, (v, bar) in enumerate(zip(rmses, bars)):
-        ax_bar.text(v + 0.05, bar.get_y() + bar.get_height()/2,
-                    f'{v:.2f}', va='center', fontsize=9,
+        ax_bar.text(v + 0.5, bar.get_y() + bar.get_height()/2,
+                    f'{v:.2f}', va='center', fontsize=8.5,
                     fontweight='bold' if i == best_idx else 'normal')
     ax_bar.legend(fontsize=8, loc='lower right')
     for spine in ['top', 'right', 'left']:
         ax_bar.spines[spine].set_visible(False)
     ax_bar.grid(axis='x', alpha=0.3)
 
-    cb = fig.colorbar(im, ax=axes[:5].tolist(), orientation='vertical',
+    # 第 8 个面板: 关键说明文字
+    ax_txt = axes[7]
+    ax_txt.axis('off')
+    info_text = (
+        "对比说明\n"
+        "────────────────\n"
+        "• 双线性: SSV 1' 双线性上采样\n"
+        "  (无船载, 基线)\n\n"
+        "• 频域融合: SSV 低频 + 船载高频\n"
+        "  (Butterworth 滤波)\n\n"
+        "• 克里金: 趋势面 + 残差克里金\n"
+        "  (大区域失败)\n\n"
+        "• 原始 KF: SSV 双线性先验 + KF\n"
+        "  (与双线性有继承, 仅参考)\n\n"
+        "• M2 地形先验: SSV + 地形 + KF\n"
+        "  (含双线性成分)\n\n"
+        "• 纯 KF: 零初值 + 卫星块约束 + 船载\n"
+        "  (★ 与双线性最干净的对比)"
+    )
+    ax_txt.text(0.05, 0.95, info_text, transform=ax_txt.transAxes,
+                fontsize=9, va='top', ha='left', family='monospace',
+                bbox=dict(boxstyle='round,pad=0.5', facecolor='#F0F0F0',
+                          edgecolor='#CCCCCC', alpha=0.95))
+
+    cb = fig.colorbar(im, ax=axes[:6].tolist(), orientation='vertical',
                       pad=0.015, shrink=0.85, aspect=35, extend='both')
     cb.set_label('FAA (mGal)', fontsize=10)
 
-    fig.suptitle('M2 vs 传统方法 — 大区域 (20°×16°) 重力场对比\n'
-                 '黑线=MR22-04 验证航迹, 黄点=训练点',
+    fig.suptitle('KF 方法 vs 传统方法 — 大区域 (20°×16°) 重力场对比\n'
+                 '黑线=MR22-04 验证航迹, 黄点=训练点  |  '
+                 '纯 KF (零初值) 是与双线性最干净的对比',
                  fontsize=12, y=1.00)
     out_png = OUTPUT_DIR / "m2_vs_traditional.png"
     plt.savefig(out_png, dpi=150, bbox_inches='tight')
