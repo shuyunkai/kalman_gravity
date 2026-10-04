@@ -21,11 +21,27 @@ from kalman_gravity import KalmanGravityReconstructor
 
 
 # 物理常数
-G_NEWTON = 6.6743e-11  # m^3 kg^-1 s^-2
-RHO_CRUST = 2670.0     # kg/m^3 (地壳平均密度)
+G_NEWTON = 6.6743e-11   # m^3 kg^-1 s^-2
+RHO_CRUST = 2670.0      # kg/m^3  地壳平均密度
+RHO_WATER = 1030.0      # kg/m^3  海水密度
+DRHO_SUBMARINE = RHO_CRUST - RHO_WATER     # 1640 kg/m^3  海底地形界面的有效密度反差
 
-# 布格重力: g = 2πGρh, 对 h=1m: g = 0.1118 mGal
-BOUGUER_PER_M = 2 * np.pi * G_NEWTON * RHO_CRUST * 1e5  # mGal per meter
+# 一阶布格平板: Δg = 2πGΔρh, 单位 mGal/m
+#   海底界面用 Δρ = ρ_c − ρ_w = 1640 (0.0688 mGal/m)
+#   陆地界面用 Δρ = ρ_c − ρ_air ≈ 2670 (0.1118 mGal/m)
+# 原实现统一用 ρ_c = 2670, 使海底起伏的重力效应被高估 2670/1640 = 1.63 倍,
+# 也与本项目早期 Parker 反演代码里的 drho = 1640 自相矛盾。
+BOUGUER_PER_M_OCEAN = 2 * np.pi * G_NEWTON * DRHO_SUBMARINE * 1e5   # 0.0688 mGal/m
+BOUGUER_PER_M_LAND = 2 * np.pi * G_NEWTON * RHO_CRUST * 1e5         # 0.1118 mGal/m
+
+
+def ocean_mask(bathy_15s):
+    """True = 海底像元 (GEBCO 高程 < 0)。
+
+    陆地像元的"海底地形—重力"关系不成立(上覆介质是空气而非海水),
+    若把所有像元一视同仁, 海岸线处会出现虚假的强台阶。需要时用本掩膜剔除陆地。
+    """
+    return bathy_15s < 0
 
 
 def block_fill(gravity_lr, upscale):
@@ -58,12 +74,18 @@ class BathyPriorKF:
         self.bathy_cutoff_deg = bathy_cutoff_deg
 
     def _bathy_to_bouguer(self, bathy_15s, lon_hr, lat_hr):
-        """从 GEBCO 水深计算布格重力异常 (一阶布格近似).
+        """GEBCO 高程 → 地形起伏引起的重力效应 (一阶布格平板近似, 单位 mGal)。
 
-        g_bouguer = 2π G ρ × depth (mGal)
-        bathy 为海底深度 (负值, m), 海沟处为大负重力异常.
+        海底界面 (bathy < 0): Δg = 2πG(ρ_c − ρ_w)·h   → 海沟为大负异常
+        陆地界面 (bathy > 0): Δg = 2πG·ρ_c·h           → 山地为正异常
+
+        注 1: 严格说这不是"布格重力异常", 而是地形/海底起伏的重力效应
+              (相当于布格改正项); 与平均深度对应的常数项会被随后的高通去掉。
+        注 2: 两种界面用不同的密度反差, 因此海岸线两侧是连续的物理量,
+              不存在"陆地当海底"造成的虚假台阶。
         """
-        return BOUGUER_PER_M * bathy_15s
+        coef = np.where(bathy_15s < 0, BOUGUER_PER_M_OCEAN, BOUGUER_PER_M_LAND)
+        return coef * bathy_15s
 
     def _high_pass(self, field, lon_hr, lat_hr):
         """高斯高通滤波, 保留 wavelength < cutoff_deg 的高频结构."""
@@ -111,6 +133,12 @@ class BathyPriorKF:
               f"σ_ssv_block={ssv_block.std():.2f}, "
               f"σ_bathy_hp={bathy_hp.std():.2f} mGal, "
               f"α={self.alpha}, prior std={prior.std():.2f}")
+        frac_ocean = float(np.mean(ocean_mask(bathy_15s)))
+        print(f"         地形系数: 海底 {BOUGUER_PER_M_OCEAN:.4f} / 陆地 "
+              f"{BOUGUER_PER_M_LAND:.4f} mGal/m; 海底像元占 {frac_ocean*100:.1f}%")
+        print(f"         注: 海底界面改用 Δρ=ρ_c−ρ_w={DRHO_SUBMARINE:.0f} kg/m^3 后, "
+              f"先验高频幅度变为原来的 {DRHO_SUBMARINE/RHO_CRUST:.3f} 倍, "
+              f"α 需重新标定")
 
         # KF 用此先验初始化 (绕过标准 initialize, 避免被船载点覆盖)
         r = KalmanGravityReconstructor(
