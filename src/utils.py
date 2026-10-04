@@ -83,7 +83,15 @@ def compute_metrics(pred, truth, mask=None):
     mu_x, mu_y = pred_v.mean(), truth_v.mean()
     sig_x, sig_y = pred_v.std(), truth_v.std()
     sig_xy = np.mean((pred_v - mu_x) * (truth_v - mu_y))
-    c1, c2 = 1e-4, 9e-4
+    # SSIM 的稳定性常数必须与数据动态范围 L 匹配: C1=(K1·L)^2, C2=(K2·L)^2,
+    # 标准取值 K1=0.01, K2=0.03。原实现硬编码 c1=1e-4, c2=9e-4 (相当于 L=1 的归一化
+    # 数据), 在 mGal 量级数据上这两项完全可忽略, 指标会退化成 Pearson 相关系数
+    # (实测: SSIM=0.996814 vs corr=0.996820, 差 6e-6)。
+    # 注: 这里仍是"全局单窗口"SSIM 的简化形式, 不是标准的分块局部窗口 SSIM。
+    L = float(np.nanmax(truth_v) - np.nanmin(truth_v))
+    if not np.isfinite(L) or L <= 0:
+        L = float(np.std(truth_v)) or 1.0
+    c1, c2 = (0.01 * L) ** 2, (0.03 * L) ** 2
     ssim = ((2 * mu_x * mu_y + c1) * (2 * sig_xy + c2)) / (
         (mu_x ** 2 + mu_y ** 2 + c1) * (sig_x ** 2 + sig_y ** 2 + c2)
     )
