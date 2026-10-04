@@ -44,6 +44,7 @@ from independent_validation_v2 import (
     load_all_cruises_split, assign_points_to_grid, VAL_CRUISE,
     JP_DATA_DIR)
 from run_pipeline import load_ssv_region
+from utils import cell_centers, grid_extent
 from freq_fusion_baseline import butterworth_2d_filter
 from kalman_gravity import KalmanGravityReconstructor
 from scipy.spatial import cKDTree
@@ -487,7 +488,7 @@ def plot_gravity_field_comparison(models, method_names, lon_hr, lat_hr,
     vmax = float(np.percentile(np.abs(all_vals), 99.5))
     norm = TwoSlopeNorm(vmin=-vmax, vcenter=0, vmax=vmax)
 
-    extent = [lon_hr[0], lon_hr[-1], lat_hr[0], lat_hr[-1]]
+    extent = grid_extent(lon_hr, lat_hr)
 
     for ax, grav, name in zip(axes, models, method_names):
         im = ax.imshow(grav, cmap='RdBu_r', norm=norm, aspect='equal',
@@ -604,8 +605,8 @@ def main(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     gravity_lr, _, lon_lr, lat_lr = load_ssv_region(lon_range, lat_range, load_vgg=False)
     ny_lr, nx_lr = gravity_lr.shape
     ny_hr, nx_hr = ny_lr * upscale, nx_lr * upscale
-    lon_hr = np.linspace(lon_range[0], lon_range[1], nx_hr)
-    lat_hr = np.linspace(lat_range[0], lat_range[1], ny_hr)
+    lon_hr = cell_centers(lon_range[0], lon_range[1], nx_hr)
+    lat_hr = cell_centers(lat_range[0], lat_range[1], ny_hr)
 
     train_points, val_points = load_all_cruises_split(lon_range, lat_range, VAL_CRUISE)
     print(f"  Val: {len(val_points):,} points (MR22-04)")

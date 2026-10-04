@@ -19,6 +19,7 @@ plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
 from independent_validation_v2 import VAL_CRUISE
+from utils import grid_extent
 from three_method_compare import (
     load_region_data, build_three_methods,
     METHOD_BILINEAR, METHOD_FREQFUSION, METHOD_KF)
@@ -50,7 +51,7 @@ def _plot_gravity_fields(models, data, lon_range, lat_range, alpha, times):
     train_points = data['train_points']
 
     method_names = [METHOD_BILINEAR, METHOD_FREQFUSION, METHOD_KF]
-    extent = [lon_hr[0], lon_hr[-1], lat_hr[0], lat_hr[-1]]
+    extent = grid_extent(lon_hr, lat_hr)          # 像元中心 -> 像元边缘
 
     # 统一色码 (基于 3 方法所有值的 0.5/99.5 百分位)
     all_vals = np.concatenate([models[n].ravel() for n in method_names])

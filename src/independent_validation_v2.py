@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from run_pipeline import load_ssv_region, NC_ENGINE, DATA_DIR
 from kalman_gravity import KalmanGravityReconstructor
-from utils import compute_metrics
+from utils import cell_centers, compute_metrics
 
 JP_DATA_DIR = Path(__file__).parent.parent / "jp_data"
 OUTPUT_DIR = Path(__file__).parent.parent / "output_real"
@@ -129,9 +129,10 @@ def evaluate_1min_grid(gravity_15s, val_points, lon_range, lat_range, upscale=4)
         for j in range(nx_lr):
             block = gravity_15s[i*upscale:(i+1)*upscale, j*upscale:(j+1)*upscale]
             model_1m[i, j] = np.nanmean(block)
-    # Ship points → 1' grid (block mean)
-    lon_lr = np.linspace(lon_range[0], lon_range[1], nx_lr)
-    lat_lr = np.linspace(lat_range[0], lat_range[1], ny_lr)
+    # Ship points → 1' grid (block mean)。必须与模型的 4x4 块均值用同一套像元中心,
+    # 否则真值分箱与模型分箱之间会错开半个 1' 像元（~0.9 km）, 使 1' 口径精度被低估。
+    lon_lr = cell_centers(lon_range[0], lon_range[1], nx_lr)
+    lat_lr = cell_centers(lat_range[0], lat_range[1], ny_lr)
     ship_1m_sum = np.zeros((ny_lr, nx_lr))
     ship_1m_cnt = np.zeros((ny_lr, nx_lr), dtype=int)
     j_idx = np.round((val_points[:, 0] - lon_lr[0]) / (lon_lr[1] - lon_lr[0])).astype(int)
@@ -204,8 +205,8 @@ def main(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
     gravity_lr, _, lon_lr, lat_lr = load_ssv_region(lon_range, lat_range, load_vgg=False)
     ny_lr, nx_lr = gravity_lr.shape
     ny_hr, nx_hr = ny_lr * upscale, nx_lr * upscale
-    lon_hr = np.linspace(lon_range[0], lon_range[1], nx_hr)
-    lat_hr = np.linspace(lat_range[0], lat_range[1], ny_hr)
+    lon_hr = cell_centers(lon_range[0], lon_range[1], nx_hr)
+    lat_hr = cell_centers(lat_range[0], lat_range[1], ny_hr)
     print(f"  SSV 1': {gravity_lr.shape}  Target 15'': ({ny_hr}, {nx_hr})")
 
     print("\n[2/5] Loading cruises...")

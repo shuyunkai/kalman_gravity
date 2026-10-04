@@ -28,6 +28,7 @@ plt.rcParams["axes.unicode_minus"] = False
 from independent_validation_v2 import (
     load_all_cruises_split, assign_points_to_grid, VAL_CRUISE)
 from run_pipeline import load_ssv_region, load_gebco_region
+from utils import cell_centers, grid_extent
 from freq_fusion_baseline import freq_fusion_reconstruct
 from kf_novel import BathyPriorKF
 
@@ -72,8 +73,15 @@ def load_region_data(lon_range, lat_range, val_cruise=VAL_CRUISE, upscale=4):
     gravity_lr, _, lon_lr, lat_lr = load_ssv_region(lon_range, lat_range, load_vgg=False)
     ny_lr, nx_lr = gravity_lr.shape
     ny_hr, nx_hr = ny_lr * upscale, nx_lr * upscale
-    lon_hr = np.linspace(lon_range[0], lon_range[1], nx_hr)
-    lat_hr = np.linspace(lat_range[0], lat_range[1], ny_hr)
+    # 像元中心约定（见 utils.cell_centers 的说明）: 不能用 linspace
+    lon_hr = cell_centers(lon_range[0], lon_range[1], nx_hr)
+    lat_hr = cell_centers(lat_range[0], lat_range[1], ny_hr)
+    # 自检: 15'' 栅格必须与 SSV 1' 像元中心严格对齐
+    dx_lr = 1.0 / 60.0
+    assert abs(lon_lr[0] - (lon_range[0] + dx_lr / 2)) < 1e-6, \
+        f"SSV 经度未按像元中心对齐: {lon_lr[0]} vs {lon_range[0] + dx_lr/2}"
+    assert abs(lat_lr[0] - (lat_range[0] + dx_lr / 2)) < 1e-6, \
+        f"SSV 纬度未按像元中心对齐: {lat_lr[0]} vs {lat_range[0] + dx_lr/2}"
     print(f"  SSV 1': {gravity_lr.shape}  目标 15'': ({ny_hr}, {nx_hr}) "
           f"({ny_hr*nx_hr/1e6:.1f}M 像素)")
 

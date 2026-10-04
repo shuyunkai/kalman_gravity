@@ -19,6 +19,37 @@ plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Noto Sans SC", 
 plt.rcParams["axes.unicode_minus"] = False
 
 
+def cell_centers(lo, hi, n):
+    """返回覆盖 [lo, hi] 的 n 个像元的中心坐标。
+
+    为什么不能用 np.linspace(lo, hi, n):
+      linspace 把 n 个采样点放在**区域边缘**（格点/边缘约定, 含两端点）,
+      而本项目的数据全部是**像元中心**约定:
+        - GEBCO 2026 的 CF 属性 node_offset = 1, lon = -179.99792 ... 179.99792
+        - SSV33.1 维度 21600x9600 = (360x60)x(160x60), 只有像元中心约定能整除
+          （格点约定应为 21601x9601）
+        - 代码自身的数组逻辑也是像元中心: block_fill 用 np.repeat 把 1' 值复制进
+          4 个连续下标, scipy.ndimage.zoom 同样把输入像元中心映到输出像元中心
+      两者混用会让整张 15'' 栅格相对 SSV/GEBCO 系统性偏移半个像元
+      （7.5'' ~ 230 m）, 并使 GEBCO 插值与验证取点全部错位。
+    """
+    return lo + (np.arange(n) + 0.5) * (hi - lo) / n
+
+
+def grid_extent(lon, lat):
+    """由像元中心坐标给出 imshow/pcolormesh 用的像元边缘 extent。
+
+    像元中心约定下 imshow(extent=[lon[0], lon[-1], ...]) 会少半格,
+    绘图时经纬度刻度与地理位置整体偏移。
+    """
+    lon = np.asarray(lon, dtype=float).ravel()
+    lat = np.asarray(lat, dtype=float).ravel()
+    dx = lon[1] - lon[0]
+    dy = lat[1] - lat[0]
+    return [lon[0] - dx / 2.0, lon[-1] + dx / 2.0,
+            lat[0] - dy / 2.0, lat[-1] + dy / 2.0]
+
+
 def compute_metrics(pred, truth, mask=None):
     """计算预测值与真值之间的多项评估指标。"""
     if mask is not None:
