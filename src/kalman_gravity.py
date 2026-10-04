@@ -37,9 +37,13 @@ class KalmanGravityReconstructor:
         self._initialized = False
 
     def initialize(self, gravity_lr, gravity_ship=None,
-                   process_noise_std=1.0, sat_noise_std=2.0, ship_noise_std=0.5,
+                   process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0,
                    ship_train_mask=None):
         """初始化滤波器：上采样卫星数据作为初值，设定噪声参数。
+
+        默认值即本项目实际使用的配置 (Q=4, R_sat=9, R_ship=1 mGal²)，与
+        BathyPriorKF / three_method_compare 保持一致；原默认值 (1.0/2.0/0.5)
+        与实跑值不同，直接调用会得到另一套方法。
 
         ship_train_mask: 船载训练/验证拆分掩码 (True=用于约束, False=保留验证).
                          避免船载数据既做初始状态又被重新观测的循环。
@@ -258,8 +262,13 @@ class KalmanGravityReconstructor:
 
         return x_smooth, P_smooth
 
-    def run(self, n_iterations=5, smooth_sigma=0.8, verbose=True):
-        """运行迭代预测-更新循环 + RTS 反向平滑，返回重建的高分辨率重力场。"""
+    def run(self, n_iterations=6, smooth_sigma=15.0, verbose=True):
+        """运行迭代预测-更新循环 + RTS 反向平滑，返回重建的高分辨率重力场。
+
+        默认值即本项目实际使用的配置 (6 轮, σ=15 像元≈7 km)，与
+        BathyPriorKF / three_method_compare 一致；原默认 (5 轮, σ=0.8)
+        会得到另一套方法。
+        """
         if not self._initialized:
             raise RuntimeError("请先调用 initialize() 初始化滤波器")
 
