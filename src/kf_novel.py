@@ -136,7 +136,7 @@ class BathyPriorKF:
         frac_ocean = float(np.mean(ocean_mask(bathy_15s)))
         print(f"         地形系数: 海底 {BOUGUER_PER_M_OCEAN:.4f} / 陆地 "
               f"{BOUGUER_PER_M_LAND:.4f} mGal/m; 海底像元占 {frac_ocean*100:.1f}%")
-        print(f"         注: 海底界面改用 Δρ=ρ_c−ρ_w={DRHO_SUBMARINE:.0f} kg/m^3 后, "
+        print(f"         注: 海底界面改用 drho=rho_c-rho_w={DRHO_SUBMARINE:.0f} kg/m^3 后, "
               f"先验高频幅度变为原来的 {DRHO_SUBMARINE/RHO_CRUST:.3f} 倍, "
               f"α 需重新标定")
 

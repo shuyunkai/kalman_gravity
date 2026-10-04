@@ -1,5 +1,5 @@
 """工具函数：评估指标计算、VGG计算、频域滤波、数据插值、可视化。"""
-import os, re, time, gzip, tempfile
+import os, re, sys, time, gzip, tempfile
 import numpy as np
 import netCDF4 as nc
 from scipy.interpolate import griddata
@@ -8,6 +8,17 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import warnings
+
+# 控制台编码保护:
+#   Windows 中文控制台默认 GBK, 若 print 里出现 GBK 之外的字符(例如数学减号 U+2212、
+#   上标 ² 等), Python 会直接抛 UnicodeEncodeError 并中断整个长流程
+#   —— 这个坑已经真实发生过(模型都算完了, 只是在打印一行诊断信息时崩溃)。
+#   这里把 stdout/stderr 的 error handler 改成 replace, 保证任何字符都不会中断计算。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="replace")
+    except Exception:
+        pass
 
 warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*overflow.*")
 

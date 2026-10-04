@@ -110,7 +110,7 @@ def plot_scatter(val_truth, predictions, method_names, save_path):
         x_line = np.array(rng_plot)
         y_line = a * x_line + b
         ax.plot(x_line, y_line, ls, lw=2.2, color=c, alpha=0.9,
-                label=f'{name}: y={a:.3f}x{b:+.2f}, R²={r2:.4f}, RMSE={rmse:.2f}')
+                label=f'{name}: y={a:.3f}x{b:+.2f}, R2={r2:.4f}, RMSE={rmse:.2f}')
 
     ax.set_xlim(rng_plot)
     ax.set_ylim(rng_plot)
