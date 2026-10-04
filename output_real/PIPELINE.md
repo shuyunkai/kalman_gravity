@@ -1,4 +1,4 @@
-# M2 地形先验 KF — 15'' 重力场重建解算流程
+# 15'' 重力场重建 — 解算流程
 
 ## 整体流程图
 
@@ -26,16 +26,17 @@
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    M2 物理先验构建 (核心)                            │
+│                    KF 物理先验构建 (核心)                            │
 ├─────────────────────────────────────────────────────────────────────┤
-│  步骤 A: SSV 1' 双线性上采样到 15'' (作低频底色 ssv_hr)              │
+│  步骤 A: SSV 1' **块常数填充** 到 15'' (非插值, 4×4 块内同值)        │
+│            ssv_block[i*4:(i+1)*4, j*4:(j+1)*4] = ssv_1p[i, j]       │
 │  步骤 B: GEBCO 水深 → 布格重力异常 (一阶布格近似)                    │
 │            g_bouguer = 2π·G·ρ·depth × 1e5 (mGal)                    │
 │            G=6.6743e-11, ρ=2670 kg/m³, depth=bathy (m)              │
 │  步骤 C: 布格重力高斯高通滤波 (cutoff=0.05° ≈ 5.5km)                │
 │            bathy_hp = bathy_bouguer - gaussian_filter(bathy_bouguer)│
 │  步骤 D: 物理先验组合                                                │
-│            prior = ssv_hr + α × bathy_hp   (α=0.2, 大区域最优)       │
+│            prior = ssv_block + α × bathy_hp   (α=0.2)                │
 └───────────────────────────┬─────────────────────────────────────────┘
                             │
                             ▼
@@ -43,7 +44,7 @@
 │              卡尔曼滤波后验修正 (KalmanGravityReconstructor)         │
 ├─────────────────────────────────────────────────────────────────────┤
 │  状态变量 x: 15'' 高分辨率格网 (ny_hr × nx_hr, 18.4M 像素)           │
-│  初始状态: x_0 = prior (物理先验, 不用 SSV 双线性直接初始化)         │
+│  初始状态: x_0 = prior                                               │
 │                                                                       │
 │  两个观测方程:                                                        │
 │    ① 卫星块均值约束: z_sat = H_sat · x, R_sat=9 (每 4×4 块均值=SSV)  │
@@ -61,12 +62,12 @@
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                       独立验证 (MR22-04)                             │
+│                       独立验证 (4 条 MR 航次)                        │
 ├─────────────────────────────────────────────────────────────────────┤
-│  1. 模型场在 MR22-04 航迹点上双线性插值取值                          │
+│  1. 模型场在航迹点上双线性插值取值 (仅验证用, 非重建)                 │
 │  2. 与船载真值对比, 计算 RMSE/MAE/STD/Corr/Bias/Max|e|              │
-│  3. 多航次重复 (MR22-04/02, MR23-02, MR21-02)                       │
-│  4. 多尺度验证 (20°×16° / 30°×24°)                                  │
+│  3. 4 条航次: MR22-04, MR22-02, MR23-02, MR21-02                    │
+│  4. 总汇总: 4 航次合并 (n=108,103 点)                              │
 └───────────────────────────┬─────────────────────────────────────────┘
                             │
                             ▼
@@ -90,15 +91,15 @@ g_bouguer = 2π·G·ρ·h    [m/s²]
 - h = -bathy (海底深度, m, 正向下)
 - 系数 2π·G·ρ·10⁵ ≈ 0.1118 mGal/m
 
-**注**: 完整 Parker 频域正演含 exp(-|k|·d) 向下延拓衰减, 一阶近似 (d=0) 等价于布格平板公式. M2 用一阶近似已足够, 因 KF 会用船载观测修正短波长偏差.
+**注**: 完整 Parker 频域正演含 exp(-|k|·d) 向下延拓衰减, 一阶近似 (d=0) 等价于布格平板公式. KF 用一阶近似已足够, 因 KF 会用船载观测修正短波长偏差.
 
-### 2. M2 物理先验
+### 2. KF 物理先验
 
 ```
-prior(x,y) = ssv_hr(x,y) + α × HP[bathy_bouguer](x,y)
+prior(x,y) = ssv_block(x,y) + α × HP[bathy_bouguer](x,y)
 ```
 
-- ssv_hr: SSV 1' 双线性上采样到 15'' (低频底色, ≤30 km 波长)
+- ssv_block: SSV 1' **块常数填充** 到 15'' (4×4 块内同值, 非插值, 低频底色)
 - HP[·]: 高斯高通滤波, cutoff=0.05° (≈5.5 km), 保留中频地形信号
 - α=0.2: 大区域最优权重 (10°×10° 时 α=0.5, 大区域需减小避免偏差累积)
 
@@ -139,49 +140,28 @@ update:   K = P_pred · H^T · (H · P_pred · H^T + R)^{-1}
 ```
 src/
 ├── kalman_gravity.py          # KalmanGravityReconstructor (核心 KF 类)
-├── kf_novel.py                # BathyPriorKF (M2 主方法)
+├── kf_novel.py                # BathyPriorKF (KF 主方法 + 块常数填充)
 ├── freq_fusion_baseline.py    # 频域融合基线 + butterworth_2d_filter
 ├── independent_validation_v2.py  # 多航次数据加载 + 验证
 ├── run_pipeline.py            # SSV/GEBCO 数据加载器
 ├── utils.py                   # 通用工具 (metrics, radial_power_spectrum 等)
 ├── val_visualization.py       # 验证可视化 (散点/直方/QQ/剖面等)
-├── compare_m2_traditional.py  # 3 方法对比主脚本
-├── tune_m2_alpha.py           # α 参数扫描
-├── m2_multi_cruise_val.py     # 多航次验证
-├── m2_distinction_viz.py      # 本质区别可视化 (差异场/功率谱)
-├── m2_large_region_val.py     # 30°×24° 大海域验证
-└── m2_accuracy_comprehensive.py  # 综合精度对比 (6 张图)
+├── three_method_compare.py    # 3 方法对比核心 (数据加载/构建/指标)
+└── cruise_validation.py       # 多航次验证 + 精度对比图生成
 ```
 
 ## 复现命令
 
 ```bash
 cd src
-
-# 1. α 扫描 (10 分钟) — 找最优 α
-python tune_m2_alpha.py
-
-# 2. 多航次验证 (5 分钟) — 4 条 MR 系列航次
-python m2_multi_cruise_val.py --alpha 0.2
-
-# 3. 本质区别可视化 (3 分钟) — 4 张图
-python m2_distinction_viz.py --alpha 0.2
-
-# 4. 30°×24° 大海域 (5 分钟)
-python m2_large_region_val.py --alpha 0.2
-
-# 5. 综合精度对比 (3 分钟) — 6 张精度指标图
-python m2_accuracy_comprehensive.py --alpha 0.2
-
-# 6. 单次 3 方法对比 (2 分钟)
-python compare_m2_traditional.py
+python cruise_validation.py --alpha 0.2
 ```
 
 ## 关键参数
 
 | 参数 | 值 | 含义 |
 |------|-----|------|
-| α (alpha) | 0.2 | 地形先验权重 (20°×16° 最优) |
+| α (alpha) | 0.2 | KF 地形先验权重 (20°×16° 最优) |
 | bathy_cutoff_deg | 0.05° | 布格高通 cutoff ≈ 5.5 km |
 | n_iter | 6 | KF 迭代次数 |
 | smooth_sigma | 15 像素 | KF 状态空间平滑 σ ≈ 7 km |

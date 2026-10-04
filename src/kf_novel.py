@@ -1,15 +1,13 @@
-"""M2 地形物理先验 KF — 15'' 重力场重建主方法.
+"""KF 地形物理先验 — 15'' 重力场重建主方法.
 
-设计动机:
-  原始 KF (KalmanGravityReconstructor) 把 SSV 1' 双线性上采样作为状态初值,
-  再用船载观测修正. 输出永远逃不开双线性的影子, 等价于"双线性 + 局部修正".
-
-M2 (BathyPriorKF) 的本质改进:
-  15" 网格的先验高频信息来自 GEBCO 地形布格正演 (物理上独立于 SSV 测高),
-  而不是 SSV 1' 双线性插值. 卫星测高无法分辨 15"-1' 频段, 但地形能.
+设计:
+  15'' 网格的先验高频信息来自 GEBCO 地形布格正演 (物理上独立于 SSV 测高).
+  SSV 1' 低频以 **块常数填充** (4×4 块内填同一值) 进入先验, 不做插值.
+  块内 15'' 结构由 α × bathy_hp 提供, KF 空间平滑消除块边界阶跃.
 
 数学形式:
-  prior = SSV_low_freq + α × (bathy_bouguer - low_pass(bathy_bouguer))
+  ssv_block = repeat_4x(ssv_1')                       # 块常数, 非插值
+  prior = ssv_block + α × (bathy_bouguer - LP(bathy_bouguer))
   state init = prior, KF 用船载观测做后验修正
 
 接口:
@@ -17,7 +15,7 @@ M2 (BathyPriorKF) 的本质改进:
         lon_range, lat_range, upscale, bathy_15s) -> gravity_15s
 """
 import numpy as np
-from scipy.ndimage import zoom as sp_zoom, gaussian_filter
+from scipy.ndimage import gaussian_filter
 
 from kalman_gravity import KalmanGravityReconstructor
 
@@ -30,13 +28,21 @@ RHO_CRUST = 2670.0     # kg/m^3 (地壳平均密度)
 BOUGUER_PER_M = 2 * np.pi * G_NEWTON * RHO_CRUST * 1e5  # mGal per meter
 
 
-class BathyPriorKF:
-    """M2: 地形物理先验 KF — SSV 低频 + GEBCO 布格重力高频.
+def block_fill(gravity_lr, upscale):
+    """SSV 1' → 15'' 块常数填充 (非插值).
 
-    与双线性本质区别:
-      - 15" 网格的先验高频信息来自地形正演 (布格近似), 不是 SSV 插值
-      - 卫星测高无法分辨 15"-1' 频段, 但地形能; 这是物理上独立的信息源
-      - 船载修正建立在物理先验上, 而不是双线性平滑上
+    每个 1' 像元值复制到 4×4 块内所有 15'' 像元, 不做任何插值.
+    块内 15'' 结构由地形先验提供, KF 平滑消除块边界.
+    """
+    return np.repeat(np.repeat(gravity_lr, upscale, axis=0), upscale, axis=1)
+
+
+class BathyPriorKF:
+    """KF: 地形物理先验 — SSV 块常数 + GEBCO 布格重力高频.
+
+    - SSV 1' 以块常数 (4×4 块内同值) 进入先验, 不做插值
+    - 15'' 网格的先验高频信息来自地形正演 (布格近似)
+    - 卫星测高无法分辨 15''-1' 频段, 但地形能; 这是物理上独立的信息源
     """
 
     def __init__(self, hr_grid_shape, lr_grid_shape, region_size_deg,
@@ -72,7 +78,7 @@ class BathyPriorKF:
     def build(self, gravity_lr, ship_15s, train_mask, lon_hr, lat_hr,
               lon_range, lat_range, upscale=4, bathy_15s=None,
               n_iter=6, smooth_sigma=15.0):
-        """构建 M2 重力场.
+        """构建 KF 重力场.
 
         参数:
           gravity_lr: SSV 1' 重力 (ny_lr, nx_lr)
@@ -91,17 +97,19 @@ class BathyPriorKF:
         if bathy_15s is None:
             raise ValueError("BathyPriorKF requires bathy_15s")
 
-        # SSV 低频 (1' 双线性上采样, 仅作低频底色)
-        ssv_hr = sp_zoom(gravity_lr, (upscale, upscale), order=1)
+        # SSV 低频以块常数填充 (4×4 块内同值, 完全无插值)
+        ssv_block = block_fill(gravity_lr, upscale)
 
         # 地形布格重力高频 (核心物理先验)
         bouguer = self._bathy_to_bouguer(bathy_15s, lon_hr, lat_hr)
         bathy_hp = self._high_pass(bouguer, lon_hr, lat_hr)
 
-        # 先验 = SSV + α × 地形高频
-        prior = ssv_hr + self.alpha * bathy_hp
+        # 先验 = SSV 块常数 + α × 地形高频
+        prior = ssv_block + self.alpha * bathy_hp
 
-        print(f"    [M2] Bathy prior: σ_bathy_hp={bathy_hp.std():.2f} mGal, "
+        print(f"    [KF] Bathy prior: "
+              f"σ_ssv_block={ssv_block.std():.2f}, "
+              f"σ_bathy_hp={bathy_hp.std():.2f} mGal, "
               f"α={self.alpha}, prior std={prior.std():.2f}")
 
         # KF 用此先验初始化 (绕过标准 initialize, 避免被船载点覆盖)
