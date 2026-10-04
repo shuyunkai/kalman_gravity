@@ -111,9 +111,20 @@ def print_metrics(metrics, title="Metrics"):
     print(f"{'='*50}")
 
 
-def compute_vgg(gravity, dx_deg, lat_center=0, lat=None, dy_deg=None):
-    """频域垂直重力梯度: VGG = dg/dz = F^{-1}[|k|*F[g]]。含纬度校正。
+# 单位换算: 重力取 mGal、波数取 rad/m 时, F^-1[|k|·F[g]] 的单位是 mGal/m。
+#   1 mGal/m = 1e-5 (m/s^2)/m = 1e-5 s^-2 = 1e4 Eotvos   (1 E = 1e-9 s^-2)
+MGAL_PER_M_TO_EOTVOS = 1e4
 
+
+def compute_vgg(gravity, dx_deg, lat_center=0, lat=None, dy_deg=None,
+                unit="Eotvos"):
+    """频域垂直重力梯度: VGG = F^{-1}[|k|·F[g]]。含纬度校正。
+
+    符号约定: 本函数实现的是 |k|·F[g], 即 −∂g/∂z (z 向上为正的垂向导数取负),
+    海山/洋脊处为正 —— 与 Sandwell 的 curv_33.1 一类 VGG 产品的习惯一致。
+    首次使用请与 data/ssv32/curv_33.1.nc 对比确认量纲与符号。
+
+    unit: "Eotvos"(默认) 返回 Eotvos; "mGal/m" 返回 mGal/m。
     可传入 lat 数组按行做纬度校正，或使用 lat_center 做全局近似。
     dy_deg 默认等于 dx_deg, 非正方形格网时需单独指定。
     """
@@ -146,7 +157,11 @@ def compute_vgg(gravity, dx_deg, lat_center=0, lat=None, dy_deg=None):
 
     G_fft = np.fft.fft2(gravity)
     VGG_fft = G_fft * k
-    vgg = np.real(np.fft.ifft2(VGG_fft))
+    vgg = np.real(np.fft.ifft2(VGG_fft))          # 单位: mGal/m
+    if unit == "Eotvos":
+        vgg = vgg * MGAL_PER_M_TO_EOTVOS
+    elif unit != "mGal/m":
+        raise ValueError(f"unit 只能是 'Eotvos' 或 'mGal/m', 收到 {unit!r}")
     return vgg
 
 
