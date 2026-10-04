@@ -38,7 +38,6 @@ VAL_CRUISES = [
 ]
 
 METRICS_TO_PLOT = ['RMSE', 'MAE', 'STD', 'Max|e|']
-METRICS_ALL = ['RMSE', 'MAE', 'STD', 'Max|e|', 'Corr']
 METHODS = [METHOD_BILINEAR, METHOD_FREQFUSION, METHOD_KF]
 COLORS = {METHOD_BILINEAR: '#A6BDDB', METHOD_FREQFUSION: '#74ADD1', METHOD_KF: '#D7301F'}
 
@@ -51,6 +50,9 @@ def run_multi_cruise_val(lon_range=(132, 152), lat_range=(26, 42),
     t_start = time.time()
 
     all_results = {}  # {cruise: [(method, metrics), ...]}
+    # 累积逐点预测/真值: 总汇总必须把四条航次的点直接拼起来重算,
+    # 不能用"对各航次指标再做一次平均"的公式近似(见下方注释)。
+    pooled = {name: {'pred': [], 'truth': []} for name in METHODS}
 
     for i, cruise in enumerate(VAL_CRUISES):
         print(f"\n{'='*70}")
@@ -84,6 +86,8 @@ def run_multi_cruise_val(lon_range=(132, 152), lat_range=(26, 42),
             m = compute_metrics(pred, val_truth)
             m['time'] = times[name]
             cruise_results.append((name, m))
+            pooled[name]['pred'].append(pred)
+            pooled[name]['truth'].append(val_truth)
             print(f"  {name:<12} RMSE={m['RMSE']:.3f}  MAE={m['MAE']:.3f}  "
                   f"Corr={m['Corr']:.4f}")
 
@@ -113,36 +117,31 @@ def run_multi_cruise_val(lon_range=(132, 152), lat_range=(26, 42),
             print(f"  RMSE={m['RMSE']:.3f}", end="  ")
         print()
 
-    # 各方法平均 RMSE
-    print(f"\n  各方法平均 RMSE:")
-    avg_metrics = {name: {} for name in METHODS}
+    # 各方法总汇总（逐点合并，而不是对各航次指标再做平均）
+    #
+    # 原实现把 RMSE/MAE/STD/Max|e| 一律按 sqrt(sum(n*v^2)/sum(n)) 聚合，只有 RMSE 恰好成立：
+    #   * MAE 是 |e| 的均值, 合并应为 n 加权算术平均 (原式系统性偏大)
+    #   * STD 合并需含航次间偏差: var = sum(n*(std^2+bias^2))/N - bias_all^2
+    #   * Max|e| 是极值, 不可"均方平均" —— 原式给出的 26.22 mGal 比它自己
+    #     三条子样本的最大值(28.42/33.80/21.65)还小, 不是任何东西的最大值
+    #   * Corr 也无法由分组相关系数还原
+    # 正确做法: 把四条航次的逐点预测/真值直接拼接后重算指标。
+    print(f"\n  各方法总汇总 (逐点合并):")
+    avg_metrics = {}
     for name in METHODS:
-        for metric in METRICS_ALL + ['n']:
-            vals = [next(m for n, m in all_results[c] if n == name)[metric]
-                    for c in valid_cruises]
-            if metric == 'n':
-                avg_metrics[name][metric] = int(np.sum(vals))
-            elif metric == 'Corr':
-                # 加权平均 (按 n)
-                ns = [next(m for n, m in all_results[c] if n == name)['n']
-                      for c in valid_cruises]
-                weights = np.array(ns, dtype=float)
-                vals_arr = np.array(vals)
-                avg_metrics[name][metric] = float(np.sum(vals_arr * weights) / np.sum(weights))
-            else:
-                # 对 RMSE/MAE/STD/Max|e| 用 sqrt(均方差) 聚合
-                # 各航次 RMSE 整体: sqrt(mean(各点误差²)) ≈ sqrt(sum(n*RMSE²)/sum(n))
-                ns = [next(m for n, m in all_results[c] if n == name)['n']
-                      for c in valid_cruises]
-                sq_sum = sum(n * v ** 2 for n, v in zip(ns, vals))
-                total_n = sum(ns)
-                avg_metrics[name][metric] = float(np.sqrt(sq_sum / total_n))
-        print(f"    {name:<12}: RMSE={avg_metrics[name]['RMSE']:.3f}  "
-              f"MAE={avg_metrics[name]['MAE']:.3f}  "
-              f"STD={avg_metrics[name]['STD']:.3f}  "
-              f"Max|e|={avg_metrics[name]['Max|e|']:.2f}  "
-              f"Corr={avg_metrics[name]['Corr']:.4f}  "
-              f"(n={avg_metrics[name]['n']:,})")
+        pred_all = np.concatenate(pooled[name]['pred'])
+        truth_all = np.concatenate(pooled[name]['truth'])
+        m = compute_metrics(pred_all, truth_all)
+        m['time'] = float(np.sum([next(mm for nn, mm in all_results[c] if nn == name)['time']
+                                  for c in valid_cruises]))
+        avg_metrics[name] = m
+        print(f"    {name:<12}: RMSE={m['RMSE']:.3f}  "
+              f"MAE={m['MAE']:.3f}  "
+              f"STD={m['STD']:.3f}  "
+              f"Max|e|={m['Max|e|']:.2f}  "
+              f"Corr={m['Corr']:.4f}  "
+              f"Bias={m['Bias']:+.3f}  "
+              f"(n={m['n']:,})")
 
     bi_rmse = avg_metrics[METHOD_BILINEAR]['RMSE']
     ff_rmse = avg_metrics[METHOD_FREQFUSION]['RMSE']
@@ -362,21 +361,23 @@ def _save_metrics_txt(all_results, valid_cruises, avg_metrics, alpha,
             cruise_short = cruise.replace("_gravity_dmo", "").replace("_gravity", "")
             f.write(f"\n  [{cruise_short}] (n_val={all_results[cruise][0][1]['n']:,})\n")
             f.write(f"    {'Method':<14} {'RMSE':<10} {'MAE':<10} {'Max|e|':<10} "
-                    f"{'STD':<10} {'Corr':<10} {'Time(s)':<8}\n")
-            f.write("    " + "-" * 75 + "\n")
+                    f"{'STD':<10} {'Corr':<10} {'Bias':<10} {'Time(s)':<8}\n")
+            f.write("    " + "-" * 85 + "\n")
             for name, m in all_results[cruise]:
                 f.write(f"    {name:<14} {m['RMSE']:<10.3f} {m['MAE']:<10.3f} "
                         f"{m['Max|e|']:<10.2f} {m['STD']:<10.3f} {m['Corr']:<10.4f} "
-                        f"{m['time']:<8.1f}\n")
+                        f"{m['Bias']:<+10.3f} {m['time']:<8.1f}\n")
         f.write("\n" + "=" * 95 + "\n")
-        f.write(f"  总汇总 (4 航次合并, n={avg_metrics[METHOD_KF]['n']:,} 点)\n")
+        f.write(f"  总汇总 (4 航次逐点合并, n={avg_metrics[METHOD_KF]['n']:,} 点)\n")
         f.write(f"    {'Method':<14} {'RMSE':<10} {'MAE':<10} {'Max|e|':<10} "
-                f"{'STD':<10} {'Corr':<10}\n")
-        f.write("    " + "-" * 65 + "\n")
+                f"{'STD':<10} {'Corr':<10} {'Bias':<10}\n")
+        f.write("    " + "-" * 75 + "\n")
         for method in METHODS:
             m = avg_metrics[method]
             f.write(f"    {method:<14} {m['RMSE']:<10.3f} {m['MAE']:<10.3f} "
-                    f"{m['Max|e|']:<10.2f} {m['STD']:<10.3f} {m['Corr']:<10.4f}\n")
+                    f"{m['Max|e|']:<10.2f} {m['STD']:<10.3f} {m['Corr']:<10.4f} "
+                    f"{m['Bias']:<+10.3f}\n")
+        f.write("    注: RMSE_bc (去偏差 RMSE) 恒等于 STD; Bias 为系统偏差(基准不一致)\n")
         f.write("\n")
         bi_rmse = avg_metrics[METHOD_BILINEAR]['RMSE']
         ff_rmse = avg_metrics[METHOD_FREQFUSION]['RMSE']
