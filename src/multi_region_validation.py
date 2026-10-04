@@ -31,7 +31,7 @@ from three_method_compare import (                # noqa: E402
     METHOD_BILINEAR, METHOD_FREQFUSION, METHOD_KF)
 from independent_validation_v2 import (            # noqa: E402
     JP_DATA_DIR, load_cruise_points, assign_points_to_grid,
-    evaluate_15s_raw, evaluate_1min_grid)          # noqa: E402
+    )                                              # noqa: E402
 
 OUTPUT_DIR = Path(__file__).parent.parent / "output_real"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -130,13 +130,19 @@ def build_region_data(cfg):
     n_ship = int(np.sum(~np.isnan(ship_grav)))
     print(f"  训练点落到 15'' 像素: {n_ship:,} ({n_ship/ship_grav.size*100:.2f}% 覆盖)")
 
-    # --- 基准检验: 训练点 vs SSV（判定是否需要长波趋势恢复）---
+    # --- 基准诊断（有意**不**修改船载数据）---
+    # 原 three_method_compare.load_region_data 的规则是: 若 |mean(船载-SSV)|>=5 或
+    # std>=15 mGal, 就给船载点加上 SSV 的长波趋势。该规则只对"残余重力"成立;
+    # 在小框内, mean(船载-SSV) 会因为 SSV 不分辨短波(实测 std 常达 10 mGal 量级)
+    # 而轻易超过 5 mGal, 此时再加一条 SSV 长波趋势会把数据彻底推歪(偏差反而放大几十 mGal)。
+    # 本脚本因此只做诊断, 不改数据; 基准差异通过 Bias 列与 RMSE_bc(=STD) 两个口径如实呈现。
     ssv_hr = np.repeat(np.repeat(gravity_lr, UPSCALE, 0), UPSCALE, 1)
-    if n_ship:
-        tm = ~np.isnan(ship_grav)
-        d = ship_grav[tm] - ssv_hr[tm]
-        print(f"  训练点 - SSV: Bias={np.nanmean(d):+.2f} STD={np.nanstd(d):.2f} mGal")
     train_mask = ~np.isnan(ship_grav)
+    if n_ship:
+        d0 = ship_grav[train_mask] - ssv_hr[train_mask]
+        print(f"  训练点 - SSV: Bias={np.nanmean(d0):+.2f} "
+              f"Median={np.nanmedian(d0):+.2f} STD={np.nanstd(d0):.2f} mGal"
+              f"  (差异含基准项 + SSV 不分辨的短波项, 故只诊断不改正)")
 
     print("  加载 GEBCO 15'' 水深...")
     bathy_15s = load_bathy_15s(lon_range, lat_range, lon_hr, lat_hr)
@@ -153,6 +159,43 @@ def build_region_data(cfg):
         lon_range=lon_range, lat_range=lat_range)
 
 
+def metrics_15s(model, val_points, lon_hr, lat_hr):
+    """15″ 口径: 模型在验证点上的双线性取值 vs 船载原始 10 s 点。
+
+    统一用 three_method_compare.compute_metrics 的键名 (RMSE/MAE/Max|e|/STD/Corr/
+    Bias/n), 避免与 utils.compute_metrics 的键名 (Correlation/N, 且没有 Max|e|) 混用。
+    """
+    from scipy.interpolate import RegularGridInterpolator
+    itp = RegularGridInterpolator((lat_hr, lon_hr), model,
+                                  bounds_error=False, fill_value=np.nan)
+    pred = itp(np.column_stack([val_points[:, 1], val_points[:, 0]]))
+    truth = val_points[:, 2]
+    m = compute_metrics(pred, truth)
+    m["RMSE_bc"] = m["STD"]          # 去偏差 RMSE 恒等于 STD
+    return m
+
+
+def metrics_1min(model, val_points, lon_range, lat_range, upscale=UPSCALE):
+    """1′ 块均值口径（与国际 1′ 模型可比的"论文标准"）。"""
+    ny_hr, nx_hr = model.shape
+    ny_lr, nx_lr = ny_hr // upscale, nx_hr // upscale
+    model_1m = model[:ny_lr * upscale, :nx_lr * upscale].reshape(
+        ny_lr, upscale, nx_lr, upscale).mean(axis=(1, 3))
+    lon_lr = cell_centers(lon_range[0], lon_range[1], nx_lr)
+    lat_lr = cell_centers(lat_range[0], lat_range[1], ny_lr)
+    j = np.round((val_points[:, 0] - lon_lr[0]) / (lon_lr[1] - lon_lr[0])).astype(int)
+    i = np.round((val_points[:, 1] - lat_lr[0]) / (lat_lr[1] - lat_lr[0])).astype(int)
+    ok = (j >= 0) & (j < nx_lr) & (i >= 0) & (i < ny_lr)
+    s = np.zeros((ny_lr, nx_lr)); c = np.zeros((ny_lr, nx_lr), dtype=int)
+    np.add.at(s, (i[ok], j[ok]), val_points[ok, 2])
+    np.add.at(c, (i[ok], j[ok]), 1)
+    ship_1m = np.where(c > 0, s / np.maximum(c, 1), np.nan)
+    mask = np.isfinite(model_1m) & np.isfinite(ship_1m)
+    m = compute_metrics(model_1m[mask], ship_1m[mask])
+    m["RMSE_bc"] = m["STD"]
+    return m, int(mask.sum())
+
+
 def run_region(cfg, alpha=0.2, n_iter=6, smooth_sigma=15.0):
     t0 = time.time()
     data = build_region_data(cfg)
@@ -165,13 +208,13 @@ def run_region(cfg, alpha=0.2, n_iter=6, smooth_sigma=15.0):
     rows = []
     for name in (METHOD_BILINEAR, METHOD_FREQFUSION, METHOD_KF):
         grav = models[name]
-        m15 = evaluate_15s_raw(grav, val_points, lon_hr, lat_hr)
-        m1, n1 = evaluate_1min_grid(grav, val_points,
-                                    data["lon_range"], data["lat_range"], UPSCALE)
+        m15 = metrics_15s(grav, val_points, lon_hr, lat_hr)
+        m1, n1 = metrics_1min(grav, val_points,
+                              data["lon_range"], data["lat_range"], UPSCALE)
         rows.append(dict(method=name, m15=m15, m1=m1, n1=int(n1),
                          time=times[name]))
         print(f"    {name:<8} 15'': RMSE={m15['RMSE']:.3f} MAE={m15['MAE']:.3f} "
-              f"STD={m15['STD']:.3f} Max|e|={m15.get('Max|e|', float('nan')):.2f} "
+              f"STD={m15['STD']:.3f} Max|e|={m15['Max|e|']:.2f} "
               f"Bias={m15['Bias']:+.3f} | 1': RMSE={m1['RMSE']:.3f} (n={n1}) "
               f"| {times[name]:.0f}s")
 
