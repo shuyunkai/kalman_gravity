@@ -72,24 +72,61 @@ def load_ssv_region(lon_range, lat_range, load_vgg=False):
 
 
 def load_gebco_region(lon_range, lat_range):
-    """加载指定区域的 GEBCO sub_ice 海底地形。"""
+    """加载指定区域的 GEBCO sub_ice 海底地形。
+
+    返回 (bathy, lon, lat); bathy 的行列顺序与返回的 lon/lat 严格对应。
+    支持区域跨越数据文件的经度端点(如 170~190E 对 -180~180 的 GEBCO):
+    越界的部分会回绕拼接, 并把回绕段平移到同一经度框架下以保持坐标单调递增,
+    否则 sel() 会静默截断(原实现的问题)。
+    """
     gebco_path = DATA_DIR / "gebco" / "GEBCO_2026_sub_ice" / "GEBCO_2026_sub_ice.nc"
     ds = xr.open_dataset(str(gebco_path), engine=NC_ENGINE)
 
-    var_name = [v for v in ds.variables if len(ds[v].dims) >= 2][0]
+    # 按名称优先选取高程变量, 找不到再退回"第一个二维变量"
+    var_name = None
+    for cand in ("elevation", "z", "topo", "height"):
+        if cand in ds.variables and len(ds[cand].dims) >= 2:
+            var_name = cand
+            break
+    if var_name is None:
+        var_name = [v for v in ds.variables if len(ds[v].dims) >= 2][0]
     ds_var = ds[var_name]
 
-    ds_lon = ds.lon.values
+    ds_lon = np.asarray(ds.lon.values)
     lon0, lon1 = lon_range[0], lon_range[1]
     if lon0 < 0 and ds_lon.min() >= 0:
         lon0 += 360
         lon1 += 360
 
     pad = 0.5
-    bathy = ds_var.sel(lon=slice(lon0 - pad, lon1 + pad),
-                       lat=slice(lat_range[0] - pad, lat_range[1] + pad)).values
-    lon_b = ds.lon.sel(lon=slice(lon0 - pad, lon1 + pad)).values
-    lat_b = ds.lat.sel(lat=slice(lat_range[0] - pad, lat_range[1] + pad)).values
+    lo, hi = lon0 - pad, lon1 + pad
+    la0, la1 = lat_range[0] - pad, lat_range[1] + pad
+    gmin, gmax = float(ds_lon.min()), float(ds_lon.max())
+    period = 360.0
+
+    # 把窗口平移到与网格同一侧
+    while lo < gmin:
+        lo += period
+        hi += period
+    while lo > gmax:
+        lo -= period
+        hi -= period
+
+    if hi <= gmax:
+        bathy = ds_var.sel(lon=slice(lo, hi), lat=slice(la0, la1)).values
+        lon_b = ds_lon[(ds_lon >= lo) & (ds_lon <= hi)]
+    else:
+        # 跨端点: [lo, gmax] + [gmin, hi - period], 后者平移 +360 保持单调
+        v1 = ds_var.sel(lon=slice(lo, gmax), lat=slice(la0, la1)).values
+        v2 = ds_var.sel(lon=slice(gmin, hi - period), lat=slice(la0, la1)).values
+        c1 = ds_lon[(ds_lon >= lo) & (ds_lon <= gmax)]
+        c2 = ds_lon[(ds_lon >= gmin) & (ds_lon <= hi - period)] + period
+        bathy = np.concatenate([v1, v2], axis=-1)
+        lon_b = np.concatenate([c1, c2])
+        print(f"  [GEBCO] 经度窗口跨过数据端点, 已回绕拼接: "
+              f"{lon_b[0]:.2f}..{lon_b[-1]:.2f} ({lon_b.size} 列)")
+
+    lat_b = ds.lat.sel(lat=slice(la0, la1)).values
     ds.close()
     return bathy, lon_b, lat_b
 
