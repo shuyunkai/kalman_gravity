@@ -127,11 +127,23 @@ class KalmanGravityReconstructor:
         self.x = x_2d.ravel()
         self.P_diag = P_2d.ravel()  # explicit: P_2d is a view, ensure P_diag updated
 
-    def update_shipborne(self, max_points_per_update=5000, prop_radius=3, prop_fraction=0.3):
+    def update_shipborne(self, max_points_per_update=None, prop_radius=3,
+                         prop_fraction=0.3, chunk_size=20000):
         """更新步-船载观测：逐点卡尔曼更新 + 高斯邻域传播。
 
         船载重力在每个测点上高精度观测，更新后通过邻域传播补偿对角协方差
         忽略的空间相关性。
+
+        max_points_per_update:
+            None（默认）= 使用**全部**有效观测点。
+            原实现默认 5000，每轮随机抽 5000 个像素，6 轮下来只有约 37% 的训练
+            像素被直接观测过；再叠加"先格网化、每格网只留一个点"的损失，实际进入
+            滤波的原始船载测量值不足 7%。数据量极大确需限流时再传正整数。
+        chunk_size:
+            邻域传播分批累加的批大小，仅用于限制峰值内存，不影响结果。
+
+        说明：本实现与原逐点循环在数学上完全等价（含边缘点窗口裁剪后重新归一化），
+        只是改为向量化 + np.bincount 累加，因此可以负担全量观测点。
         """
         if not self._initialized:
             raise RuntimeError("请先调用 initialize() 初始化滤波器")
@@ -146,12 +158,11 @@ class KalmanGravityReconstructor:
             print("  无有效船载观测点, 跳过更新")
             return
 
-        n_obs = min(len(valid_indices), max_points_per_update)
-        if len(valid_indices) > max_points_per_update:
+        if max_points_per_update is not None and len(valid_indices) > max_points_per_update:
             seed = 42 + self._iter_count
             rng = np.random.default_rng(seed)
-            chosen = rng.choice(len(valid_indices), n_obs, replace=False)
-            obs_indices = valid_indices[chosen]
+            chosen = rng.choice(len(valid_indices), max_points_per_update, replace=False)
+            obs_indices = np.sort(valid_indices[chosen])
         else:
             obs_indices = valid_indices
         self._iter_count += 1
@@ -160,33 +171,48 @@ class KalmanGravityReconstructor:
         P_2d = self.P_diag.reshape(self.ny, self.nx)
         ship_flat = self.gravity_ship.ravel()
 
-        correction_field = np.zeros_like(x_2d)
-        weight_field = np.zeros_like(x_2d)
+        # ---- 1. 逐点标量卡尔曼更新（矢量化；观测像素互不重复，顺序无关）----
+        ii, jj = np.divmod(obs_indices, self.nx)
+        P_ii = P_2d[ii, jj]
+        K = P_ii / (P_ii + self.R_ship_val)
+        innov = ship_flat[obs_indices] - x_2d[ii, jj]
+        x_2d[ii, jj] += K * innov
+        P_2d[ii, jj] = (1.0 - K) * P_ii
 
-        for idx in obs_indices:
-            i, j = divmod(idx, self.nx)
-            z = ship_flat[idx]
-            z_pred = x_2d[i, j]
-            P_ii = P_2d[i, j]
-            K = P_ii / (P_ii + self.R_ship_val)
-            innovation = z - z_pred
-            x_2d[i, j] += K * innovation
-            P_2d[i, j] = (1 - K) * P_ii
+        # ---- 2. 高斯邻域传播（矢量化 + bincount 累加）----
+        r = prop_radius
+        offs = np.arange(-r, r + 1)
+        dyy, dxx = np.meshgrid(offs, offs, indexing="ij")
+        dist = np.sqrt(dxx.astype(float) ** 2 + dyy.astype(float) ** 2)
+        w_base = np.exp(-0.5 * (dist / (r / 2.0)) ** 2)      # (2r+1, 2r+1)
 
-            i0 = max(0, i - prop_radius)
-            i1 = min(self.ny, i + prop_radius + 1)
-            j0 = max(0, j - prop_radius)
-            j1 = min(self.nx, j + prop_radius + 1)
+        n_obs = obs_indices.size
+        win = (2 * r + 1) ** 2
+        flat_i = np.empty(n_obs * win, dtype=np.int64)
+        flat_c = np.empty(n_obs * win, dtype=np.float64)
+        flat_w = np.empty(n_obs * win, dtype=np.float64)
+        pos = 0
+        for s in range(0, n_obs, chunk_size):
+            sl = slice(s, min(s + chunk_size, n_obs))
+            ti = ii[sl, None, None] + dyy[None, :, :]
+            tj = jj[sl, None, None] + dxx[None, :, :]
+            inside = (ti >= 0) & (ti < self.ny) & (tj >= 0) & (tj < self.nx)
+            # 边缘点的窗口被裁剪后按原实现重新归一化
+            S = np.where(inside, w_base[None, :, :], 0.0).sum(axis=(1, 2))
+            cw = w_base[None, :, :] / np.maximum(S, 1e-10)[:, None, None]
+            m = int(inside.sum())
+            contrib = (K[sl] * innov[sl])[:, None, None] * cw      # (m, W, W)
+            flat_i[pos:pos + m] = (ti[inside] * self.nx + tj[inside])
+            flat_c[pos:pos + m] = contrib[inside]
+            flat_w[pos:pos + m] = cw[inside]
+            pos += m
+        flat_i, flat_c, flat_w = flat_i[:pos], flat_c[:pos], flat_w[:pos]
 
-            sy, sx = i1 - i0, j1 - j0
-            dy = np.abs(np.arange(sy) - (i - i0)).reshape(sy, 1)
-            dx = np.abs(np.arange(sx) - (j - j0)).reshape(1, sx)
-            dist = np.sqrt(dx * dx + dy * dy)
-            w = np.exp(-0.5 * (dist / (prop_radius / 2.0)) ** 2)
-            w = w / w.sum()
-
-            correction_field[i0:i1, j0:j1] += K * innovation * w
-            weight_field[i0:i1, j0:j1] += w
+        big = self.ny * self.nx
+        correction_field = np.bincount(flat_i, weights=flat_c,
+                                       minlength=big).reshape(self.ny, self.nx)
+        weight_field = np.bincount(flat_i, weights=flat_w,
+                                   minlength=big).reshape(self.ny, self.nx)
 
         has_weight = weight_field > 0
         no_ship = ~valid_mask
