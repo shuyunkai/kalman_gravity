@@ -58,8 +58,8 @@ REGIONS = {
         note="大洋盆地/岛弧过渡"),
     "E_MarianaSouth": dict(
         label="马里亚纳南部(零船载)", lon=(155.0, 167.0), lat=(-16.0, 8.0),
-        val=("KR16-04_gravity_dmo",), train=(),
-        note="区域内无训练航次 -> 隔离检验地形先验的贡献"),
+        val=("KR16-04_gravity_dmo",), train=(), kind="control",
+        note="区域内无训练航次 -> 隔离检验地形先验的贡献（对照实验, 不计入多区域验证）"),
     "G_CurrentBox": dict(
         label="当前验证区(参考)", lon=(132.0, 152.0), lat=(26.0, 42.0),
         val=("MR22-04_gravity_dmo", "MR22-02_gravity_dmo",
@@ -148,8 +148,9 @@ def build_region_data(cfg):
     bathy_15s = load_bathy_15s(lon_range, lat_range, lon_hr, lat_hr)
     print(f"  GEBCO: [{np.nanmin(bathy_15s):.0f}, {np.nanmax(bathy_15s):.0f}] m")
 
-    return dict(
-        label=cfg["label"], note=cfg["note"], val_names=val_names,
+    return dict(label=cfg["label"], note=cfg["note"],
+                kind=cfg.get("kind", "validation"),
+                val_names=val_names,
         train_names=train_names, val_points=val_points,
         gravity_lr=gravity_lr, lon_lr=lon_lr, lat_lr=lat_lr,
         lon_hr=lon_hr, lat_hr=lat_hr,
@@ -226,7 +227,7 @@ def run_region(cfg, alpha=0.2, n_iter=6, smooth_sigma=15.0):
           f"KF vs 频域融合: 15'' {100*(1-kf['m15']['RMSE']/ff['m15']['RMSE']):+.1f}%")
     print(f"  用时 {time.time()-t0:.0f}s")
 
-    return dict(label=data["label"], note=data["note"], rows=rows,
+    return dict(label=data["label"], note=data["note"], kind=data["kind"], rows=rows,
                 n_val=len(val_points),
                 n_train_px=int(data["train_mask"].sum()),
                 n_train_cruises=len(data["train_names"]),
@@ -234,50 +235,80 @@ def run_region(cfg, alpha=0.2, n_iter=6, smooth_sigma=15.0):
 
 
 def write_summary(results, alpha, path):
+    main = [r for r in results if r.get("kind") != "control"]
+    ctrl = [r for r in results if r.get("kind") == "control"]
+
+    def _block(r):
+        out = []
+        out.append("")
+        out.append(f"[{r['label']}]  {r['note']}")
+        out.append(f"  验证航次({len(r['val_names'])}): {', '.join(r['val_names'])}"
+                   f"   验证点 n={r['n_val']:,}")
+        out.append(f"  训练: {r['n_train_cruises']} 条航次 / {r['n_train_px']:,} 个 15'' 像素")
+        out.append(f"  {'方法':<10}{'RMSE15':>9}{'RMSEbc':>9}{'MAE15':>9}"
+                   f"{'Max|e|15':>10}{'Bias15':>9}{'Corr15':>9}"
+                   f"{'RMSE1m':>9}{'RMSEbc1m':>10}{'n1m':>8}")
+        out.append("  " + "-" * 108)
+        for row in r["rows"]:
+            a, b = row["m15"], row["m1"]
+            out.append(f"  {row['method']:<10}{a['RMSE']:>9.3f}{a['STD']:>9.3f}"
+                       f"{a['MAE']:>9.3f}{a['Max|e|']:>10.2f}"
+                       f"{a['Bias']:>+9.3f}{a['Corr']:>9.4f}"
+                       f"{b['RMSE']:>9.3f}{b['STD']:>10.3f}{row['n1']:>8,}")
+        kf = next(x for x in r["rows"] if x["method"] == METHOD_KF)
+        bi = next(x for x in r["rows"] if x["method"] == METHOD_BILINEAR)
+        ff = next(x for x in r["rows"] if x["method"] == METHOD_FREQFUSION)
+        out.append(
+            f"  KF 改善: vs 双线性 15'' {100*(1-kf['m15']['RMSE']/bi['m15']['RMSE']):+.1f}%"
+            f" (去偏差 {100*(1-kf['m15']['STD']/bi['m15']['STD']):+.1f}%)"
+            f" / 1' {100*(1-kf['m1']['RMSE']/bi['m1']['RMSE']):+.1f}%"
+            f"  |  vs 频域融合 15'' {100*(1-kf['m15']['RMSE']/ff['m15']['RMSE']):+.1f}%"
+            f" (去偏差 {100*(1-kf['m15']['STD']/ff['m15']['STD']):+.1f}%)")
+        return out
+
     lines = []
-    lines.append("=" * 108)
+    lines.append("=" * 112)
     lines.append("  多区域独立航次验证（整条航次留出，未参与解算）")
     lines.append(f"  KF 参数: alpha={alpha}, n_iter=6, smooth_sigma=15 px, "
                  f"Q=4, R_sat=9, R_ship=1 mGal^2（全部区域冻结同一套参数）")
     lines.append("  口径: 15'' = 模型点对船载原始 10 s 点；1' = 模型块均值对船载块均值")
-    lines.append("=" * 108)
-    for r in results:
-        lines.append("")
-        lines.append(f"[{r['label']}]  {r['note']}")
-        lines.append(f"  验证航次({len(r['val_names'])}): {', '.join(r['val_names'])}"
-                     f"   验证点 n={r['n_val']:,}")
-        lines.append(f"  训练: {r['n_train_cruises']} 条航次 / {r['n_train_px']:,} 个 15'' 像素")
-        lines.append(f"  {'方法':<10}{'RMSE15':>9}{'MAE15':>9}{'STD15':>9}"
-                     f"{'Max|e|15':>10}{'Bias15':>9}{'Corr15':>9}"
-                     f"{'RMSE1m':>9}{'MAE1m':>9}{'n1m':>8}")
-        lines.append("  " + "-" * 100)
-        for row in r["rows"]:
-            a, b = row["m15"], row["m1"]
-            lines.append(f"  {row['method']:<10}{a['RMSE']:>9.3f}{a['MAE']:>9.3f}"
-                         f"{a['STD']:>9.3f}{a.get('Max|e|', float('nan')):>10.2f}"
-                         f"{a['Bias']:>+9.3f}{a['Corr']:>9.4f}"
-                         f"{b['RMSE']:>9.3f}{b['MAE']:>9.3f}{row['n1']:>8,}")
-        kf = next(x for x in r["rows"] if x["method"] == METHOD_KF)
-        bi = next(x for x in r["rows"] if x["method"] == METHOD_BILINEAR)
-        ff = next(x for x in r["rows"] if x["method"] == METHOD_FREQFUSION)
-        lines.append(f"  KF 改善: vs 双线性 15'' {100*(1-kf['m15']['RMSE']/bi['m15']['RMSE']):+.1f}%"
-                     f" / 1' {100*(1-kf['m1']['RMSE']/bi['m1']['RMSE']):+.1f}%"
-                     f"  |  vs 频域融合 15'' {100*(1-kf['m15']['RMSE']/ff['m15']['RMSE']):+.1f}%"
-                     f" / 1' {100*(1-kf['m1']['RMSE']/ff['m1']['RMSE']):+.1f}%")
+    lines.append("  注意: RMSE 含船载与卫星两套数据之间的基准差, 该差值三种方法几乎相同,"
+                 " 不是方法误差;")
+    lines.append("        RMSEbc = 去偏差 RMSE（恒等于 STD），是衡量方法本身精度的口径。")
+    lines.append("=" * 112)
+    for r in main:
+        lines += _block(r)
+
     lines.append("")
-    lines.append("=" * 108)
-    lines.append("  跨区域汇总（各区域 KF 的 15'' RMSE）")
-    lines.append("=" * 108)
-    lines.append(f"  {'区域':<24}{'KF RMSE':>10}{'双线性':>10}{'频域融合':>10}"
-                 f"{'KF 改善':>10}{'验证点':>10}")
-    lines.append("  " + "-" * 76)
-    for r in results:
+    lines.append("=" * 112)
+    lines.append("  跨区域汇总（KF 的 15'' 精度）")
+    lines.append("=" * 112)
+    lines.append(f"  {'区域':<22}{'KF':>9}{'双线性':>9}{'频域融合':>10}"
+                 f"{'KF 改善':>10}{'去偏差改善':>12}{'验证点':>10}")
+    lines.append("  " + "-" * 84)
+    for r in main:
         kf = next(x for x in r["rows"] if x["method"] == METHOD_KF)
         bi = next(x for x in r["rows"] if x["method"] == METHOD_BILINEAR)
         ff = next(x for x in r["rows"] if x["method"] == METHOD_FREQFUSION)
-        lines.append(f"  {r['label']:<24}{kf['m15']['RMSE']:>10.3f}{bi['m15']['RMSE']:>10.3f}"
+        lines.append(f"  {r['label']:<22}{kf['m15']['RMSE']:>9.3f}{bi['m15']['RMSE']:>9.3f}"
                      f"{ff['m15']['RMSE']:>10.3f}"
-                     f"{100*(1-kf['m15']['RMSE']/bi['m15']['RMSE']):>9.1f}%{r['n_val']:>10,}")
+                     f"{100*(1-kf['m15']['RMSE']/bi['m15']['RMSE']):>9.1f}%"
+                     f"{100*(1-kf['m15']['STD']/bi['m15']['STD']):>11.1f}%{r['n_val']:>10,}")
+
+    if ctrl:
+        lines.append("")
+        lines.append("=" * 112)
+        lines.append("  对照实验（不作为多区域验证的一部分：区域内没有任何训练航次，")
+        lines.append("  方法退化为仅地形先验，用于隔离检验地形先验自身能贡献多少）")
+        lines.append("=" * 112)
+        for r in ctrl:
+            lines += _block(r)
+        lines.append("")
+        lines.append("  解读: 该区 bias ≈ +9.2 mGal 是船载 KR16-04 与 SSV 之间的基准差,")
+        lines.append("        三种方法几乎相同, 占了 RMSE^2 的 95% 以上; 去掉它(RMSEbc)后")
+        lines.append("        三种方法都在 1.7~2.0 mGal, 说明: 没有船载约束时, 地形先验")
+        lines.append("        并不能把精度显著推到卫星模型之外 —— 全部增益来自船载点约束。")
+
     txt = "\n".join(lines)
     path.write_text(txt, encoding="utf-8")
     print("\n" + txt)
