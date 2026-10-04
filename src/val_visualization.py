@@ -41,8 +41,8 @@ plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 
 from independent_validation_v2 import (
-    load_all_cruises_split, assign_points_to_grid, VAL_CRUISE,
-    JP_DATA_DIR)
+    load_all_cruises_split, assign_points_to_grid, evaluate_15s_raw,
+    VAL_CRUISE, JP_DATA_DIR)
 from run_pipeline import load_ssv_region
 from utils import cell_centers, grid_extent
 from freq_fusion_baseline import butterworth_2d_filter
