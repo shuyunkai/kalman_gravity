@@ -107,6 +107,33 @@ def region_slices(lon_hr, lat_hr):
     return slice(gi0, gi1), slice(gj0, gj1)
 
 
+def stamp_provenance(ds):
+    """把代码版本写入产品属性, 让文件自证是由哪一版代码生成的。"""
+    import hashlib
+    import subprocess
+
+    repo = Path(__file__).parent.parent
+
+    def git(*args):
+        try:
+            r = subprocess.run(["git", "-C", str(repo), *args],
+                               capture_output=True, encoding="utf-8", errors="replace")
+            return (r.stdout or "").strip()
+        except Exception:
+            return ""
+
+    src_dir = Path(__file__).parent
+    srcs = sorted(f.name for f in src_dir.glob("*.py"))
+    h = hashlib.sha256()
+    for f in srcs:
+        h.update((src_dir / f).read_bytes())
+    ds.code_commit = git("rev-parse", "HEAD") or "unknown"
+    ds.code_commit_subject = git("log", "-1", "--format=%s") or "unknown"
+    ds.code_worktree_clean = "yes" if not git("status", "--porcelain") else "NO"
+    ds.code_src_sha256 = h.hexdigest()
+    ds.code_src_files = f"{len(srcs)} files: " + ",".join(srcs)
+
+
 def main():
     import argparse
     ap = argparse.ArgumentParser()
@@ -210,6 +237,7 @@ def main():
                    "The old kalman_gravity_15s.nc is superseded (it used a gridline "
                    "coordinate convention and pasted in residual-gravity patches "
                    "without datum recovery, giving -13..-28 mGal regional biases).")
+    stamp_provenance(ds_out)
     ds_out.close()
 
     size = out_path.stat().st_size
