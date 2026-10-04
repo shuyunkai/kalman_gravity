@@ -93,6 +93,10 @@ def load_gebco_region(lon_range, lat_range):
     ds_var = ds[var_name]
 
     ds_lon = np.asarray(ds.lon.values)
+    if lon_range[1] <= lon_range[0]:
+        raise ValueError(
+            f"lon_range 必须写成 (西边界, 东边界) 且东边界>西边界, 收到 {lon_range}; "
+            f"跨日界线的区域请写成连续区间, 例如 (170, 190) 而不是 (175, -175)")
     lon0, lon1 = lon_range[0], lon_range[1]
     if lon0 < 0 and ds_lon.min() >= 0:
         lon0 += 360
