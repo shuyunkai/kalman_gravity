@@ -105,6 +105,22 @@ class KalmanGravityReconstructor:
         hr_per_lr_y = self.ny // lr_ny
         hr_per_lr_x = self.nx // lr_nx
 
+        if hr_per_lr_y * lr_ny == self.ny and hr_per_lr_x * lr_nx == self.nx:
+            # 矢量化路径: (ny, nx) -> (lr_ny, hy, lr_nx, hx)，一次算完全部块。
+            # 20°x16° 区域是 1,152,000 个块, 原来的双重 Python 循环是这个流程最大的
+            # 性能瓶颈(约占总耗时绝大部分), 等价改写后为个位数次 numpy 归约。
+            X = x_2d.reshape(lr_ny, hr_per_lr_y, lr_nx, hr_per_lr_x)
+            Pb = P_2d.reshape(lr_ny, hr_per_lr_y, lr_nx, hr_per_lr_x)
+            z_pred = X.mean(axis=(1, 3))
+            P_bar = Pb.mean(axis=(1, 3))
+            K = P_bar / (P_bar + self.R_sat_val)
+            innovation = self.gravity_lr - z_pred
+            X += (K * innovation)[:, None, :, None]
+            Pb[...] = ((1.0 - K) * P_bar)[:, None, :, None]
+            self.x = x_2d.ravel()
+            self.P_diag = P_2d.ravel()
+            return
+
         for i in range(lr_ny):
             for j in range(lr_nx):
                 i0 = i * hr_per_lr_y
