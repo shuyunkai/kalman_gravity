@@ -81,10 +81,14 @@ def _estimate_coherence_cutoff(ship_filled, ssv_hr, dx_deg, dy_deg, lat_center):
         P_sg = F_s * np.conj(F_g)
 
         k_max = k.max()
+        k_pos = k[k > 0]
+        k_min = k_pos.min()
         n_bins = 50
-        k_bins = np.linspace(0, k_max, n_bins + 1)
+        # 对数分箱: 线性分箱会把 50 个箱几乎全部堆在最高频端, 使相干曲线只在
+        # 波长 1.4~71 像元(约 0.6~33 km) 有采样, "相干=0.5 对应波长"无法被正确检出。
+        k_bins = np.logspace(np.log10(k_min), np.log10(k_max), n_bins + 1)
         coh = np.zeros(n_bins)
-        lam = np.zeros(n_bins)
+        lam = np.zeros(n_bins)          # 波长, 单位: 米 (k 为 rad/m)
         for i in range(n_bins):
             mask = (k >= k_bins[i]) & (k < k_bins[i + 1])
             if mask.sum() < 10:
@@ -92,21 +96,32 @@ def _estimate_coherence_cutoff(ship_filled, ssv_hr, dx_deg, dy_deg, lat_center):
             ps = np.mean(P_ss[mask])
             pg = np.mean(P_gg[mask])
             psg = np.mean(P_sg[mask])
+            if ps <= 0.0 or pg <= 0.0:
+                continue          # 该频段无信号功率, 相干性无定义
             coh[i] = np.abs(psg)**2 / (ps * pg + 1e-30)
-            lam[i] = 2 * np.pi / np.sqrt(max(k_bins[i]**2, 1e-20))
+            k_c = np.sqrt(max(k_bins[i] * k_bins[i + 1], 1e-20))   # 取箱的几何中心
+            lam[i] = 2 * np.pi / k_c
 
         valid = lam > 0
-        lam_v = lam[valid]
+        lam_v = lam[valid] / 1000.0     # 米 -> 千米（原实现写成 *1000, 结果必被截断到上界）
         coh_v = coh[valid]
-        order = np.argsort(lam_v)
+        # 从长波端向短波端扫描: 船载与测高的相干性在长波段应接近 1, 随波长变短而下降,
+        # "第一个跌破 0.5 的波长"才是相干=0.5 的截止波长。
+        # 原实现按波长升序(短->长)取 idx[0], 会把最高频噪声底处的穿越误当作答案。
+        order = np.argsort(lam_v)[::-1]
         lam_v = lam_v[order]
         coh_v = coh_v[order]
         idx = np.where(coh_v < 0.5)[0]
         if len(idx) > 0:
-            cutoff_m = lam_v[idx[0]] * 1000  # km
-            cutoff_m = float(np.clip(cutoff_m, 10, 60))
-            print(f"  Estimated coherence=0.5 cutoff: {cutoff_m:.1f} km")
-            return cutoff_m
+            if idx[0] == 0:
+                print("  [warn] 最长波段相干性已 < 0.5, 无可用相干频段, 回退默认 27 km")
+                return 27.0
+            cutoff_km = float(lam_v[idx[0]])
+            clipped = float(np.clip(cutoff_km, 10, 60))
+            if abs(clipped - cutoff_km) > 1e-9:
+                print(f"  [warn] 相干=0.5 交叉波长 {cutoff_km:.1f} km 越出经验区间 [10, 60], 已截断")
+            print(f"  Estimated coherence=0.5 cutoff: {clipped:.1f} km")
+            return clipped
     except Exception as e:
         print(f"  Coherence estimation failed ({e}), using default 27 km")
     return 27.0
