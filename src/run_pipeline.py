@@ -55,7 +55,14 @@ def load_ssv_region(lon_range, lat_range, load_vgg=False):
             vgg = np.concatenate([v1, v2], axis=1)
         l1 = ds_g.lon.sel(lon=slice(lon0, lmax)).values
         l2 = ds_g.lon.sel(lon=slice(-lmax, lon1)).values
-        lon = np.sort(np.concatenate([l1, l2]))
+        # 数据列是按 [l1, l2] 顺序拼接的, 必须用同一个 order 同时重排
+        # 坐标与数据; 原实现只对 lon 做了 np.sort, 导致坐标与数据列错位。
+        lon_cat = np.concatenate([l1, l2])
+        order = np.argsort(lon_cat)
+        lon = lon_cat[order]
+        gravity = gravity[:, order]
+        if load_vgg:
+            vgg = vgg[:, order]
 
     lat = ds_g.lat.sel(lat=lat_slice).values
     ds_g.close()
