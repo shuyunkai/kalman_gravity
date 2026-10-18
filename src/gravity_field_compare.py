@@ -27,7 +27,7 @@ from three_method_compare import (
 OUTPUT_DIR = Path(__file__).parent.parent / "output_real"
 
 
-def main(lon_range=(132, 152), lat_range=(26, 42), alpha=0.2):
+def main(lon_range=(132, 152), lat_range=(26, 42), alpha=0.5):
     print("=" * 70)
     print("  3 方法验证区域重力异常场对比")
     print("=" * 70)

@@ -262,10 +262,10 @@ class KalmanGravityReconstructor:
 
         return x_smooth, P_smooth
 
-    def run(self, n_iterations=6, smooth_sigma=15.0, verbose=True):
+    def run(self, n_iterations=6, smooth_sigma=4.0, verbose=True):
         """运行迭代预测-更新循环 + RTS 反向平滑，返回重建的高分辨率重力场。
 
-        默认值即本项目实际使用的配置 (6 轮, σ=15 像元≈7 km)，与
+        默认值即本项目实际使用的配置 (6 轮, σ=4 像元≈1.85 km)，与
         BathyPriorKF / three_method_compare 一致；原默认 (5 轮, σ=0.8)
         会得到另一套方法。
         """

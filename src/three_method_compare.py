@@ -113,7 +113,7 @@ def load_region_data(lon_range, lat_range, val_cruise=VAL_CRUISE, upscale=4):
     }
 
 
-def build_three_methods(data, alpha=0.2, n_iter=6, smooth_sigma=15.0):
+def build_three_methods(data, alpha=0.5, n_iter=6, smooth_sigma=4.0):
     """构建 3 方法: 双线性 / 频域融合 / KF."""
     ssv_hr = data['ssv_hr']
     gravity_lr = data['gravity_lr']

@@ -46,9 +46,9 @@ LAT0, LAT1 = -80.0, 80.0
 LON0, LON1 = -180.0, 180.0
 NLAT, NLON = 38400, 86400            # 15 arc-sec
 UPSCALE = 4
-ALPHA = 0.2
+ALPHA = 0.5
 N_ITER = 6
-SMOOTH_SIGMA = 15.0
+SMOOTH_SIGMA = 4.0
 
 # 默认参与解算的区域（边界必须都是 15″ 的整数倍, 才能与全球网格整数对齐）
 DEFAULT_REGIONS = ("G_CurrentBox", "A_JapanTrench", "B_HonshuEast",

@@ -99,7 +99,7 @@ class BathyPriorKF:
 
     def build(self, gravity_lr, ship_15s, train_mask, lon_hr, lat_hr,
               lon_range, lat_range, upscale=4, bathy_15s=None,
-              n_iter=6, smooth_sigma=15.0):
+              n_iter=6, smooth_sigma=4.0):
         """构建 KF 重力场.
 
         参数:

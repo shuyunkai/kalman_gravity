@@ -267,7 +267,7 @@ def main(lon_range=(140, 150), lat_range=(30, 40), upscale=4):
         gravity_lr=gravity_lr, gravity_ship=ship_grav,
         ship_train_mask=train_mask,
         process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0)
-    results['KF'] = r.run(n_iterations=6, smooth_sigma=15.0)
+    results['KF'] = r.run(n_iterations=6, smooth_sigma=4.0)
     print(f"      done {time.time()-t0:.0f}s")
 
     # Freq Fusion (Butterworth, 传统方法对照)

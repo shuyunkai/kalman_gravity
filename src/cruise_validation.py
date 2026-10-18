@@ -43,7 +43,7 @@ COLORS = {METHOD_BILINEAR: '#A6BDDB', METHOD_FREQFUSION: '#74ADD1', METHOD_KF: '
 
 
 def run_multi_cruise_val(lon_range=(132, 152), lat_range=(26, 42),
-                         upscale=4, alpha=0.2):
+                         upscale=4, alpha=0.5):
     print("=" * 70)
     print("  多航次独立验证 — 3 方法精度对比")
     print("=" * 70)

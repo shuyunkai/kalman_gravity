@@ -197,7 +197,7 @@ def metrics_1min(model, val_points, lon_range, lat_range, upscale=UPSCALE):
     return m, int(mask.sum())
 
 
-def run_region(cfg, alpha=0.2, n_iter=6, smooth_sigma=15.0):
+def run_region(cfg, alpha=0.5, n_iter=6, smooth_sigma=4.0):
     t0 = time.time()
     data = build_region_data(cfg)
     print("  构建 3 方法 (双线性 / 频域融合 / KF)...")
@@ -269,7 +269,7 @@ def write_summary(results, alpha, path):
     lines = []
     lines.append("=" * 112)
     lines.append("  多区域独立航次验证（整条航次留出，未参与解算）")
-    lines.append(f"  KF 参数: alpha={alpha}, n_iter=6, smooth_sigma=15 px, "
+    lines.append(f"  KF 参数: alpha={alpha:.2f}, n_iter=6, smooth_sigma=4 px, "
                  f"Q=4, R_sat=9, R_ship=1 mGal^2（全部区域冻结同一套参数）")
     lines.append("  口径: 15'' = 模型点对船载原始 10 s 点；1' = 模型块均值对船载块均值")
     lines.append("  注意: RMSE 含船载与卫星两套数据之间的基准差, 该差值三种方法几乎相同,"
@@ -320,7 +320,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--regions", nargs="*", default=None,
                    help="要跑的区域键名, 默认全部; 例: --regions A_JapanTrench E_MarianaSouth")
-    p.add_argument("--alpha", type=float, default=0.2)
+    p.add_argument("--alpha", type=float, default=0.5)
     p.add_argument("--out", default="multi_region_validation.txt")
     a = p.parse_args()
 
