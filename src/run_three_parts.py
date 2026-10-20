@@ -31,6 +31,9 @@ from scale_decomposition import (multi_scale, thg, tilt_angle, theta_map,
                                  bandpass as bp_scale)
 from bathymetry_inversion import (parker_forward, parker_inversion,
                                   bandpass as bp_inv)
+from fault_validation import (lineament_segments, rose_hist, distance_stats,
+                              load_usgs_csv, trench_distance)
+from inversion_eval import band_metrics, amplitude_slope, profile
 
 FONT = Path(r"D:\gravity\fonts\SourceHanSansSC-Regular.otf")
 if FONT.exists():
@@ -105,8 +108,8 @@ def main():
     density = np.zeros_like(g)
     ridge_info = {}
     for lo, hi, lab in band_defs:
-        mask = filter_lineaments(lineament_mask(bands[lab], dx, dy, pct=86),
-                                 min_area=80, min_elong=2.2)
+        mask = filter_lineaments(lineament_mask(bands[lab], dx, dy, pct=84)
+                                 & (bathy < 0), min_area=60, min_elong=2.2)
         density += mask.astype(np.float64)
         ridge_info[lab] = dict(pixels=int(mask.sum()),
                                ratio=float(mask.mean() * 100))
@@ -128,6 +131,76 @@ def main():
                  fontsize=12, fontweight="bold", color="#1F3864")
     fig.tight_layout()
     fig.savefig(OUT / "fig_fault_candidates.png", bbox_inches="tight")
+    plt.close(fig)
+
+    # ---- 定量验证：走向、地震、海沟轴
+    print("   validation: rose / earthquakes / trench axis")
+    ocean = bathy < 0
+    masks = {lab: filter_lineaments(lineament_mask(bands[lab], dx, dy, pct=84)
+                                    & ocean, min_area=60, min_elong=2.2)
+             for _, _, lab in band_defs}
+    seg_by_band = {lab: lineament_segments(masks[lab], lon, lat, 80, 2.2)
+                   for lab in masks}
+
+    fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.8), dpi=180,
+                             subplot_kw={"projection": "polar"})
+    for ax, (_, _, lab) in zip(axes, band_defs):
+        th, hh = rose_hist(seg_by_band[lab])
+        ax.bar(th, hh, width=np.radians(15) * 0.88, color="#1F4E79", alpha=0.85)
+        ax.set_theta_zero_location("N"); ax.set_theta_direction(-1)
+        ax.set_title(f"{lab}\n{len(seg_by_band[lab])} 段", fontsize=9)
+    fig.suptitle("断裂候选走向玫瑰图（按长度加权）", fontsize=12, fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(OUT / "fig_fault_rose.png", bbox_inches="tight")
+    plt.close(fig)
+
+    eq_csv = OUT / "usgs_eq.csv"
+    if not eq_csv.exists():
+        import urllib.request
+        url = ("https://earthquake.usgs.gov/fdsnws/event/1/query?format=csv"
+               "&starttime=2000-01-01&endtime=2026-01-01"
+               "&minlatitude=32&maxlatitude=40&minlongitude=141&maxlongitude=149"
+               "&minmagnitude=4.0&maxdepth=100")
+        urllib.request.urlretrieve(url, eq_csv)
+    eq_lon, eq_lat, eq_mag = load_usgs_csv(eq_csv)
+    print(f"   earthquakes: {len(eq_lon):,}")
+
+    eq_stats = {}
+    for lab in masks:
+        eq_stats[lab] = distance_stats(masks[lab], eq_lon, eq_lat, lon, lat)
+    tr_stats = trench_distance(masks["10–50 km"], bathy, lat, lon)
+
+    lab0 = "10–50 km"
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6.2), dpi=180,
+                             gridspec_kw={"width_ratios": [1.45, 1]})
+    ax = axes[0]
+    v = np.percentile(np.abs(g), 99)
+    ax.imshow(g, cmap="Greys", origin="lower", vmin=-v, vmax=v, alpha=0.65,
+              interpolation="nearest", aspect="auto",
+              extent=[lon[0], lon[-1], lat[0], lat[-1]])
+    ys, xs = np.where(masks[lab0])
+    ax.scatter(lon[xs], lat[ys], s=0.3, c="#1F4E79", alpha=0.6, linewidths=0)
+    ax.scatter(eq_lon, eq_lat, s=np.clip(eq_mag, 1, 7) ** 1.8, c="#C0392B",
+               alpha=0.55, edgecolors="none", label="USGS M≥4")
+    ax.legend(loc="upper right", fontsize=8, frameon=False)
+    ax.set_xlabel("经度 (°E)"); ax.set_ylabel("纬度 (°N)")
+    ax.set_title(f"线性体（{lab0}）与地震分布", fontsize=11, fontweight="bold")
+
+    ax = axes[1]
+    d = eq_stats[lab0]["dist"]
+    ax.hist(d, bins=60, color="#1F4E79", alpha=0.8)
+    ax.axvline(eq_stats[lab0]["median_km"], color="#C0392B", lw=1.5,
+               label=f"中位数 {eq_stats[lab0]['median_km']:.1f} km")
+    ax.axvline(20, color="#7F8C8D", ls="--", lw=1.2, label="20 km")
+    ax.set_xlabel("地震点到最近线性体的距离 (km)")
+    ax.set_ylabel("地震数")
+    ax.set_title(f"距离分布：{eq_stats[lab0]['frac_in_radius']*100:.1f}% 在 20 km 内"
+                 f"（随机点 {eq_stats[lab0]['random_frac']*100:.1f}%）",
+                 fontsize=9.5)
+    ax.legend(fontsize=8, frameon=False)
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(OUT / "fig_fault_validation.png", bbox_inches="tight")
     plt.close(fig)
 
     # ---------------------------------------------------------------- 三、反演
@@ -161,6 +234,36 @@ def main():
     rmse = float(np.sqrt(np.mean((h_inv_bp - h_bp) ** 2)))
     corr_h = float(np.corrcoef(h_inv_bp.ravel(), h_bp.ravel())[0, 1])
     print(f"   inversion: RMSE={rmse:.1f} m, corr={corr_h:.3f}")
+
+    bm = band_metrics(h_inv_bp, h_bp, dx, dy)
+    amp_a, amp_b = amplitude_slope(h_inv_bp, h_bp)
+    dist_pr, hi_pr, ht_pr = profile(h_inv_bp, h_bp, lon, lat,
+                                    (143.5, 39.0), (143.5, 33.0))
+    print(f"   amplitude slope = {amp_a:.2f}")
+
+    fig, axes = plt.subplots(1, 2, figsize=(13.5, 4.8), dpi=180,
+                             gridspec_kw={"width_ratios": [1.7, 1]})
+    ax = axes[0]
+    ax.plot(dist_pr, ht_pr, color="#1F3864", lw=1.4, label="GEBCO 带通")
+    ax.plot(dist_pr, hi_pr, color="#C0392B", lw=1.2, alpha=0.85, label="反演")
+    ax.set_xlabel("沿剖面距离 (km)"); ax.set_ylabel("相对起伏 (m)")
+    ax.set_title("横穿海沟剖面（143.5°E，39°→33°N）", fontsize=10.5)
+    ax.legend(fontsize=8, frameon=False); ax.grid(alpha=0.3)
+
+    ax = axes[1]
+    labels = [b["band"] for b in bm]
+    vals = [b["rmse"] for b in bm]
+    ax.barh(labels, vals, color="#2E75B6")
+    for i, b in enumerate(bm):
+        ax.text(b["rmse"] + 5, i, f"{b['rmse']:.0f} m / r={b['corr']:.2f}",
+                va="center", fontsize=8.5)
+    ax.set_xlabel("RMSE (m)")
+    ax.set_title("分频段精度", fontsize=10.5)
+    ax.set_xlim(0, max(vals) * 1.45)
+    ax.grid(axis="x", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(OUT / "fig_inversion_eval.png", bbox_inches="tight")
+    plt.close(fig)
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 10), dpi=180)
     v = np.percentile(np.abs(dg_bp), 99)
@@ -207,16 +310,28 @@ def main():
         "",
         "二、多尺度分解与断裂属性",
         "  方法：带通 10–50/50–100/100–200 km 三个尺度带（频域），",
-        "        THG 阈值(86%) + Zhang–Suen 细化 + 细长体筛选（去小块/闭环）；tilt 作为属性图",
+        "        THG 阈值(84%，仅海洋) + Zhang–Suen 细化 + 细长体筛选（去小块/闭环）；tilt 作为属性图",
     ]
     for lab, info in ridge_info.items():
-        lines.append(f"  {lab}: 脊线像元 {info['pixels']:,}（{info['ratio']:.2f}%）")
+        lines.append(f"  {lab}: 线性体像元 {info['pixels']:,}（{info['ratio']:.2f}%）")
+    lines += [
+        "",
+        "  定量验证：",
+    ]
+    for lab, st in eq_stats.items():
+        lines.append(f"    {lab}: 地震点中位距 {st['median_km']:.1f} km，"
+                     f"{st['frac_in_radius']*100:.1f}% 在 20 km 内"
+                     f"（随机 {st['random_frac']*100:.1f}%），n={st['n']}")
+    lines.append(f"    海沟轴到最近线性体：中位 {tr_stats['median_km']:.1f} km，"
+                 f"P90 {tr_stats['p90_km']:.1f} km")
     lines += [
         "",
         "三、Parker–Oldenburg 反演",
         f"  参考深度 z0 = {z0:.0f} m，密度差 ρ = {best_rho:.0f} kg/m³（扫描选定）",
         f"  正演校验：corr = {corr_fwd:.3f}，振幅比 = {amp_ratio:.3f}",
-        f"  反演精度：RMSE = {rmse:.1f} m，corr = {corr_h:.3f}",
+        f"  反演精度：RMSE = {rmse:.1f} m，corr = {corr_h:.3f}，振幅斜率 = {amp_a:.2f}",
+        *[f"    {b['band']}: RMSE {b['rmse']:.0f} m, corr {b['corr']:.2f}, "
+          f"振幅比 {b['amp']:.2f}" for b in bm],
         f"  残差收敛：{', '.join(f'{v:.2f}' for v in hist)} mGal",
         "",
         f"图件：{OUT}",
