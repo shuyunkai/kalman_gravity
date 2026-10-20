@@ -32,7 +32,8 @@ from scale_decomposition import (multi_scale, thg, tilt_angle, theta_map,
 from bathymetry_inversion import (parker_forward, parker_inversion,
                                   bandpass as bp_inv)
 from fault_validation import (lineament_segments, rose_hist, distance_stats,
-                              load_usgs_csv, trench_distance)
+                              load_usgs_csv, trench_distance, load_gem_faults,
+                              densify, fault_match)
 from inversion_eval import band_metrics, amplitude_slope, profile
 
 FONT = Path(r"D:\gravity\fonts\SourceHanSansSC-Regular.otf")
@@ -153,6 +154,50 @@ def main():
     fig.tight_layout()
     fig.savefig(OUT / "fig_fault_rose.png", bbox_inches="tight")
     plt.close(fig)
+
+    gem_path = OUT / "gem_active_faults.geojson"
+    fault_stats = {}
+    flon = flat = np.array([])
+    if gem_path.exists():
+        flines = load_gem_faults(gem_path, lon.min(), lon.max(), lat.min(), lat.max())
+        flon, flat = densify(flines, step_km=2.0)
+        for lab in masks:
+            fault_stats[lab] = fault_match(masks[lab], flon, flat, lon, lat)
+        print(f"   GEM faults: {len(flines)} lines, {len(flon):,} points")
+
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6.0), dpi=180,
+                                 gridspec_kw={"width_ratios": [1.5, 1]})
+        ax = axes[0]
+        v = np.percentile(np.abs(g), 99)
+        ax.imshow(g, cmap="Greys", origin="lower", vmin=-v, vmax=v, alpha=0.6,
+                  interpolation="nearest", aspect="auto",
+                  extent=[lon[0], lon[-1], lat[0], lat[-1]])
+        for arr in flines:
+            ax.plot(arr[:, 0], arr[:, 1], color="#C0392B", lw=1.1, alpha=0.9)
+        ys, xs = np.where(masks["10–50 km"])
+        ax.scatter(lon[xs], lat[ys], s=0.3, c="#1F4E79", alpha=0.55, linewidths=0)
+        ax.set_xlabel("经度 (°E)"); ax.set_ylabel("纬度 (°N)")
+        ax.set_title("GEM 活动断层（红）与线性体（蓝）", fontsize=11,
+                     fontweight="bold")
+
+        ax = axes[1]
+        labs = list(fault_stats)
+        rec = [fault_stats[k]["recall"] * 100 for k in labs]
+        pre = [fault_stats[k]["precision"] * 100 for k in labs]
+        x = np.arange(len(labs)); w = 0.36
+        ax.bar(x - w / 2, rec, w, label="断层 20 km 内有线性体", color="#1F4E79")
+        ax.bar(x + w / 2, pre, w, label="线性体 20 km 内有断层", color="#2E75B6")
+        ax.set_xticks(x); ax.set_xticklabels(labs, fontsize=8.5)
+        ax.set_ylabel("%"); ax.set_ylim(0, 100)
+        ax.legend(fontsize=8, frameon=False)
+        ax.set_title("吻合率（随机基线 %.1f%% / %.1f%%）"
+                     % (fault_stats[list(fault_stats)[0]]["recall_random"] * 100,
+                        fault_stats[list(fault_stats)[0]]["precision_random"] * 100),
+                     fontsize=9)
+        ax.grid(axis="y", alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(OUT / "fig_fault_match.png", bbox_inches="tight")
+        plt.close(fig)
 
     eq_csv = OUT / "usgs_eq.csv"
     if not eq_csv.exists():
@@ -329,6 +374,13 @@ def main():
                      f"（随机 {st['random_frac']*100:.1f}%），n={st['n']}")
     lines.append(f"    海沟轴到最近线性体：中位 {tr_stats['median_km']:.1f} km，"
                  f"P90 {tr_stats['p90_km']:.1f} km")
+    if fault_stats:
+        lines.append("  GEM 活动断层吻合率（20 km）：")
+        for lab, st in fault_stats.items():
+            lines.append(f"    {lab}: 断层被覆盖 {st['recall']*100:.1f}%"
+                         f"（随机 {st['recall_random']*100:.1f}%），"
+                         f"线性体命中 {st['precision']*100:.1f}%"
+                         f"（随机 {st['precision_random']*100:.1f}%）")
     lines += [
         "",
         "三、Parker–Oldenburg 反演",

@@ -124,3 +124,79 @@ def trench_distance(mask, bathy, lat, lon, lon_min=142.0, lon_max=145.5,
     d, _ = tree.query(np.column_stack([X, Y]))
     return dict(median_km=float(np.median(d)), p90_km=float(np.percentile(d, 90)),
                 dist=d)
+
+
+def load_gem_faults(path, lon_min, lon_max, lat_min, lat_max):
+    """读取 GEM 全球活动断层 GeoJSON，裁到给定经纬度框，返回线段列表。"""
+    import json
+
+    d = json.loads(Path(path).read_text(encoding="utf-8"))
+    lines = []
+    for f in d["features"]:
+        g = f.get("geometry")
+        if not g:
+            continue
+        coords = g["coordinates"]
+        if g["type"] == "LineString":
+            parts = [coords]
+        elif g["type"] == "MultiLineString":
+            parts = coords
+        else:
+            continue
+        for line in parts:
+            arr = np.asarray([(p[0], p[1]) for p in line if len(p) >= 2], float)
+            if len(arr) < 2:
+                continue
+            inside = ((arr[:, 0] >= lon_min) & (arr[:, 0] <= lon_max)
+                      & (arr[:, 1] >= lat_min) & (arr[:, 1] <= lat_max))
+            if inside.any():
+                lines.append(arr)
+    return lines
+
+
+def densify(lines, step_km=2.0):
+    """把断层线按 step_km 加密成点，返回 (lon, lat)。"""
+    lons, lats = [], []
+    for arr in lines:
+        for (x0, y0), (x1, y1) in zip(arr[:-1], arr[1:]):
+            dx = (x1 - x0) * KM_PER_DEG * np.cos(np.radians((y0 + y1) / 2))
+            dy = (y1 - y0) * KM_PER_DEG
+            n = max(1, int(np.hypot(dx, dy) / step_km))
+            t = np.linspace(0, 1, n, endpoint=False)
+            lons.append(x0 + t * (x1 - x0))
+            lats.append(y0 + t * (y1 - y0))
+    if not lons:
+        return np.array([]), np.array([])
+    return np.concatenate(lons), np.concatenate(lats)
+
+
+def fault_match(mask, fault_lon, fault_lat, lon, lat, radius_km=20.0,
+                n_random=4000, seed=0):
+    """线性体与公开断层的吻合率。
+
+    recall    = 断层点中，20 km 内有线性体的比例
+    precision = 线性体像元中，20 km 内有断层的比例
+    同时给随机点基线。
+    """
+    lp = _mask_points_km(mask, lon, lat)
+    tree_l = cKDTree(lp)
+    fx, fy = _xy(fault_lon, fault_lat)
+    fp = np.column_stack([fx, fy])
+    tree_f = cKDTree(fp)
+    d_f, _ = tree_l.query(fp)
+    d_l, _ = tree_f.query(lp)
+
+    rng = np.random.default_rng(seed)
+    rx = rng.uniform(lon.min(), lon.max(), n_random)
+    ry = rng.uniform(lat.min(), lat.max(), n_random)
+    rp = np.column_stack(_xy(rx, ry))
+    dr_l, _ = tree_l.query(rp)
+    dr_f, _ = tree_f.query(rp)
+    return dict(
+        recall=float(np.mean(d_f <= radius_km)),
+        precision=float(np.mean(d_l <= radius_km)),
+        recall_random=float(np.mean(dr_l <= radius_km)),
+        precision_random=float(np.mean(dr_f <= radius_km)),
+        n_fault=int(len(fp)), n_line=int(len(lp)),
+        median_fault_km=float(np.median(d_f)),
+    )

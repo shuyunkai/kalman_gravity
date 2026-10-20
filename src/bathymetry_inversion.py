@@ -45,21 +45,26 @@ def bandpass(field, dx, dy, lam_min, lam_max, order=4):
     return np.real(np.fft.ifft2(np.fft.fft2(field) * lp * hp))
 
 
-def parker_forward(h, dx, dy, rho, z0, n_terms=5):
-    """由界面起伏 h 正演重力异常（mGal）。"""
+def parker_forward(h, dx, dy, rho, z0, n_terms=5, mu=0.0):
+    """由界面起伏 h 正演重力异常（mGal）。
+
+    mu > 0 为变密度（VDM）：密度差随深度衰减，核函数由 (-k) 变为 -(k+mu)，
+    对应 pyParkO 中 (frequency - mu) 的写法（符号随 h 正方向约定）。
+    """
     K = _K(h.shape[1], h.shape[0], dx, dy)
+    Kmu = K + mu
     F = np.fft.fft2(h.astype(np.float64))
     total = np.zeros_like(F)
     hn = np.ones_like(h, dtype=np.float64)
     for n in range(1, n_terms + 1):
         hn = hn * h
-        total += ((-K) ** (n - 1)) / math.factorial(n) * np.fft.fft2(hn)
+        total += ((-Kmu) ** (n - 1)) / math.factorial(n) * np.fft.fft2(hn)
     dg = 2 * np.pi * G * rho * np.exp(-K * z0) * total
     return np.real(np.fft.ifft2(dg)) * MGAL
 
 
 def parker_inversion(dg, dx, dy, rho, z0, n_iter=10, lam_min=20e3,
-                     relax=0.8, taper=0.05, verbose=True):
+                     relax=0.8, taper=0.05, verbose=True, mu=0.0):
     """由重力异常反演界面起伏 h（m），返回 h 与迭代诊断。"""
     ny, nx = dg.shape
     # 边缘余弦 taper，抑制 FFT 环绕
@@ -76,7 +81,7 @@ def parker_inversion(dg, dx, dy, rho, z0, n_iter=10, lam_min=20e3,
     hist = []
     best_h, best_rmse = h.copy(), np.inf
     for it in range(n_iter):
-        pred = parker_forward(h, dx, dy, rho, z0)
+        pred = parker_forward(h, dx, dy, rho, z0, mu=mu)
         resid = dg_w - pred
         rmse = float(np.sqrt(np.mean(resid ** 2)))
         hist.append(rmse)
