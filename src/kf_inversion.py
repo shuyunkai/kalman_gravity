@@ -10,7 +10,7 @@ from bathymetry_inversion import _K, parker_forward, lowpass, G, MGAL
 
 def spectral_kf_inversion(dg, dx, dy, rho, z0, prior_rms=2500.0, slope=2.5,
                           noise_mgal=2.0, n_iter=8, lam_min=25e3,
-                          relax=0.8, taper=0.05):
+                          relax=0.8, taper=0.05, R_spec=None):
     ny, nx = dg.shape
     wy = np.ones(ny); wx = np.ones(nx)
     n_y = max(1, int(ny * taper)); n_x = max(1, int(nx * taper))
@@ -24,7 +24,7 @@ def spectral_kf_inversion(dg, dx, dy, rho, z0, prior_rms=2500.0, slope=2.5,
     A = 2 * np.pi * G * rho * np.exp(-K * z0) * MGAL   # mGal / m
     k0 = 2 * np.pi / 100e3
     P0 = prior_rms ** 2 * (k0 / np.maximum(K, 1e-9)) ** slope
-    R = noise_mgal ** 2
+    R = noise_mgal ** 2 if R_spec is None else R_spec
     gain = P0 * A / (A ** 2 * P0 + R)
 
     h = np.zeros((ny, nx))

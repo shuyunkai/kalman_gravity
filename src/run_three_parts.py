@@ -161,7 +161,7 @@ def main():
     flon = flat = np.array([])
     if gem_path.exists():
         flines = load_gem_faults(gem_path, lon.min(), lon.max(), lat.min(), lat.max())
-        flon, flat = densify(flines, step_km=2.0)
+        flon, flat = densify(flines, step_km=1.0)
         for lab in masks:
             fault_stats[lab] = fault_match(masks[lab], flon, flat, lon, lat)
         print(f"   GEM faults: {len(flines)} lines, {len(flon):,} points")
@@ -414,3 +414,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

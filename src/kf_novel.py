@@ -158,4 +158,6 @@ class BathyPriorKF:
         r.ship_train_mask = train_mask
         r._iter_count = 0
         gravity_15s = r.run(n_iterations=n_iter, smooth_sigma=smooth_sigma)
+        # 保存后验方差（逐像元，mGal^2），供反演/不确定度使用
+        self.P_diag = r.P_diag.copy()
         return gravity_15s
