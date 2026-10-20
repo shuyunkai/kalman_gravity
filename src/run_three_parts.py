@@ -35,6 +35,7 @@ from fault_validation import (lineament_segments, rose_hist, distance_stats,
                               load_usgs_csv, trench_distance, load_gem_faults,
                               densify, fault_match)
 from inversion_eval import band_metrics, amplitude_slope, profile
+from kf_inversion import spectral_kf_inversion
 
 FONT = Path(r"D:\gravity\fonts\SourceHanSansSC-Regular.otf")
 if FONT.exists():
@@ -278,7 +279,19 @@ def main():
     h_inv_bp = bp_inv(h_inv, dx, dy, LAM_MIN, LAM_MAX)
     rmse = float(np.sqrt(np.mean((h_inv_bp - h_bp) ** 2)))
     corr_h = float(np.corrcoef(h_inv_bp.ravel(), h_bp.ravel())[0, 1])
-    print(f"   inversion: RMSE={rmse:.1f} m, corr={corr_h:.3f}")
+    print(f"   Parker: RMSE={rmse:.1f} m, corr={corr_h:.3f}")
+
+    # 谱域 KF 反演（主方法）
+    h_kf, hist_kf = spectral_kf_inversion(dg_bp, dx, dy, best_rho, z0,
+                                          prior_rms=2500.0, noise_mgal=2.0,
+                                          n_iter=8, lam_min=25e3, relax=0.6)
+    h_kf_bp = bp_inv(h_kf, dx, dy, LAM_MIN, LAM_MAX)
+    rmse_kf = float(np.sqrt(np.mean((h_kf_bp - h_bp) ** 2)))
+    corr_kf = float(np.corrcoef(h_kf_bp.ravel(), h_bp.ravel())[0, 1])
+    print(f"   KF: RMSE={rmse_kf:.1f} m, corr={corr_kf:.3f}")
+    h_inv, h_inv_bp = h_kf, h_kf_bp
+    rmse, corr_h = rmse_kf, corr_kf
+    hist = hist_kf
 
     bm = band_metrics(h_inv_bp, h_bp, dx, dy)
     amp_a, amp_b = amplitude_slope(h_inv_bp, h_bp)
@@ -342,7 +355,7 @@ def main():
     ax.set_xlabel("GEBCO 带通地形 (m)"); ax.set_ylabel("反演地形 (m)")
     ax.set_title("反演 vs 真值", fontsize=11, color="#1F3864", fontweight="bold")
     ax.grid(alpha=0.3)
-    fig.suptitle("Parker–Oldenburg 反演海底地形（ρ=1640 kg/m³，20–200 km 带通）",
+    fig.suptitle("谱域 KF 反演海底地形（平稳先验，与 Parker 等价）",
                  fontsize=14, fontweight="bold")
     fig.tight_layout()
     fig.savefig(OUT / "fig_bathymetry_inversion.png", bbox_inches="tight")
@@ -383,7 +396,7 @@ def main():
                          f"（随机 {st['precision_random']*100:.1f}%）")
     lines += [
         "",
-        "三、Parker–Oldenburg 反演",
+        "三、谱域 KF 反演（Parker 对照）",
         f"  参考深度 z0 = {z0:.0f} m，密度差 ρ = {best_rho:.0f} kg/m³（扫描选定）",
         f"  正演校验：corr = {corr_fwd:.3f}，振幅比 = {amp_ratio:.3f}",
         f"  反演精度：RMSE = {rmse:.1f} m，corr = {corr_h:.3f}，振幅斜率 = {amp_a:.2f}",
