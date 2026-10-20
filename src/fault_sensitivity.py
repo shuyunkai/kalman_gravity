@@ -38,27 +38,39 @@ def main():
                   f"precision={st['precision']*100:.1f} "
                   f"(rand {st['precision_random']*100:.1f})")
 
+    # 局部构造方向（结构张量）与断层走向比较：
+    # 注意不能用“最近线段的方位”，稀疏线段会互相匹配出伪一致。
+    from scipy.ndimage import gaussian_filter
+
     b = bandpass(g, dx, dy, 10e3, 50e3)
-    segs = lineament_segments(filter_lineaments(
-        lineament_mask(b, dx, dy, pct=84) & (bathy < 0), min_area=60,
-        min_elong=2.2), lon, lat)
-    la = np.array([s[0] for s in segs])
-    lx = np.array([s[2] for s in segs]); ly = np.array([s[3] for s in segs])
-    from scipy.spatial import cKDTree
-    X, Y = _xy(lx, ly)
-    tree = cKDTree(np.c_[X, Y])
-    fx, fy = _xy(flon, flat)
-    dist, _ = tree.query(np.c_[fx, fy])
-    fa = []
+    gy, gx = np.gradient(b, dy, dx)
+    s = 8
+    Jxx = gaussian_filter(gx * gx, s)
+    Jyy = gaussian_filter(gy * gy, s)
+    Jxy = gaussian_filter(gx * gy, s)
+    theta = 0.5 * np.arctan2(2 * Jxy, Jxx - Jyy)
+    line_dir = (np.degrees(theta) + 90.0) % 180.0
+
+    def sample(x, y):
+        i = np.clip(np.searchsorted(lat, y) - 1, 0, len(lat) - 1)
+        j = np.clip(np.searchsorted(lon, x) - 1, 0, len(lon) - 1)
+        return line_dir[i, j]
+
+    diffs = []
     for arr in flines:
         for (x0, y0), (x1, y1) in zip(arr[:-1], arr[1:]):
-            fa.append(np.degrees(np.arctan2(y1 - y0,
-                                           (x1 - x0) * np.cos(np.radians(y0)))) % 180)
-    fa = np.array(fa)
-    diff = np.abs(fa[:, None] - la[None, :])
-    diff = np.minimum(diff, 180 - diff)
+            strike = np.degrees(np.arctan2(y1 - y0,
+                                           (x1 - x0) * np.cos(np.radians(y0)))) % 180
+            ld = sample((x0 + x1) / 2, (y0 + y1) / 2)
+            diff = abs(strike - ld)
+            diffs.append(min(diff, 180 - diff))
+    diffs = np.array(diffs)
+    print("fault segments", len(diffs))
     for tol in (15, 20, 30):
-        print(f"orientation within {tol} deg: {(diff <= tol).any(axis=1).mean()*100:.1f}%")
+        print(f"local orientation within {tol} deg: "
+              f"{(diffs <= tol).mean()*100:.1f}% "
+              f"(random {2*tol/180*100:.1f}%)")
+    print("median diff", np.median(diffs))
 
 
 if __name__ == "__main__":
