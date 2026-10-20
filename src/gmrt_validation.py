@@ -21,7 +21,7 @@ def load_gmrt(path):
     y0, y1 = ds["y_range"].values
     z = np.flipud(ds["z"].values.reshape(ny, nx))
     lon = np.linspace(x0, x1, nx)
-    lat = np.linspace(y1, y0, ny)
+    lat = np.linspace(y0, y1, ny)
     ds.close()
     return z, lon, lat
 
@@ -59,6 +59,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 

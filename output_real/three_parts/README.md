@@ -216,3 +216,15 @@ VDM 的 `mu` 在 0–5×10⁻⁵ m⁻¹ 内对相关性与振幅影响 <1%，说
 
 **船测水深**：仓库仍无测深数据。
 
+
+## GMRT 配准与公开断层数据（本轮）
+
+**GMRT 配准已修好**：GMT 网格需 `reshape(ny,nx)` 后 `flipud`，纬度按升序。结果：
+- GEBCO vs GMRT：RMSE 60 m，corr 0.997（配准正确）；
+- KF 反演 vs GMRT：**RMSE 648 m，corr 0.608**，与对 GEBCO 的 650.8 m 一致——反演量级在独立地形产品上得到复核。
+
+**公开断层数据**：
+- AIST/NIED 活断層データベース只有 WebGIS 检索，无 shapefile/GeoJSON 下载（试过 gbank 各路径、WFS、GitHub、Zenodo）；
+- 另下载了 PB2002 板块边界（221 KB，区内 3 条，含海沟/转换断层），但线性体距海沟轴 80–200 km，2–50 km 缓冲命中 0%；
+- GEM（45 条）仍是唯一可用的活动断层矢量基准。
+
