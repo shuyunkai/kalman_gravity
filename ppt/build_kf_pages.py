@@ -174,7 +174,7 @@ s = new_slide("8.5", "断裂识别结果：GM9 海域验证", "结果", [
     P(("留出法：22 条训练选参、22 条留出报告；缓冲 1–20 km，", 13.5, GREY, False),
       ("随机点作基线", 13.5, RED, True), ("。", 13.5, GREY, False)),
 ])
-picture(s, "fig_fault_validation_curve.png", 0.42, 1.62, 6.90, 4.35)
+picture(s, "fig_fault_validation_2.png", 0.42, 1.62, 6.90, 3.10)
 panel(s, 7.55, 1.62, 5.35, 4.55)
 textbox(s, 7.82, 1.72, 4.9, 0.30, [("验证设计", 12, NAVY, True)])
 bullets(s, 7.82, 2.06, 4.95, [
@@ -185,7 +185,7 @@ bullets(s, 7.82, 2.06, 4.95, [
 textbox(s, 7.82, 3.95, 4.9, 0.30, [("结果（留出段）", 12, NAVY, True)])
 bullets(s, 7.82, 4.29, 4.95, [
     "2 km：覆盖 22.2%（随机 3.4%）",
-    "5 km：56.2%（随机 7.8%），命中 50.6%",
+    "5 km：覆盖 56.2%（随机 7.8%），命中 50.6%（随机 8.1%）",
     "10 km：72.9%（随机 16.0%）",
 ], size=9.2, gap=0.56)
 textbox(s, 7.82, 5.95, 4.85, 0.30,
@@ -198,7 +198,7 @@ s = new_slide("8.6", "反演结果：KF 与 Parker 对照", "结果", [
       ("GMRT 独立产品交叉验证", 13.5, RED, True),
       ("，三条线同时报告。", 13.5, GREY, False)),
 ])
-picture(s, "fig_inversion_validation.png", 0.42, 1.62, 6.90, 3.20)
+picture(s, "fig_inversion_validation_2.png", 0.42, 1.62, 6.90, 3.10)
 textbox(s, 0.50, 5.05, 6.80, 1.35, [
     [("频段", 9, NAVY, True), ("        RMSE", 9, NAVY, True),
      ("     corr", 9, NAVY, True)],
