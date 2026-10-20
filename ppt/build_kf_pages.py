@@ -148,7 +148,7 @@ for k, (t, body) in enumerate([
     textbox(s, x + 0.22, 5.30, 3.55, 0.28, [(t, 12, NAVY, True)])
     textbox(s, x + 0.22, 5.62, 3.55, 0.80,
             [(body, 9.5, GREY, False)], spacing=1.25)
-strip(s, [N("与 7.1 重建同属一套 KF："), R("状态分量"), N(" 代替单一状态，观测方程不变")])
+strip(s, [N("状态由单一场扩展为"), R("三个尺度分量"), N("，观测方程保持不变")])
 
 # ---------------------------------------------------------------- 7.3 原理
 s = new_slide("7.3", "KF 反演：谱域状态与增益", "方法", [
@@ -167,64 +167,43 @@ for k, (t, body) in enumerate([
     textbox(s, x + 0.22, 5.30, 3.55, 0.28, [(t, 12, NAVY, True)])
     textbox(s, x + 0.22, 5.62, 3.55, 0.80,
             [(body, 9.5, GREY, False)], spacing=1.25)
-strip(s, [N("与 7.1 同一 KF 框架："), R("观测方程 A"), N(" 换成 Parker 正演，预测换成谱域先验")])
+strip(s, [N("观测方程换为"), R("Parker 正演"), N("，预测换为谱域先验")])
 
 # ---------------------------------------------------------------- 8.5 结果
 s = new_slide("8.5", "断裂识别结果：GM9 海域验证", "结果", [
-    P(("留出法：22 条训练选参、22 条留出报告；缓冲 1–20 km，", 13.5, GREY, False),
-      ("随机点作基线", 13.5, RED, True), ("。", 13.5, GREY, False)),
+    P(("以", 13.5, GREY, False), ("留出断层段与随机基线", 13.5, RED, True),
+      ("检验 5–20 km 线性体与 GM9 海域断层的空间吻合度。", 13.5, GREY, False)),
 ])
-picture(s, "fig_fault_validation_2.png", 0.42, 1.62, 6.90, 3.10)
-panel(s, 7.55, 1.62, 5.35, 4.55)
-textbox(s, 7.82, 1.72, 4.9, 0.30, [("验证设计", 12, NAVY, True)])
-bullets(s, 7.82, 2.06, 4.95, [
-    "留出法：训练段选阈值，留出段报结果",
-    "缓冲半径扫描 1–20 km，随机点同口径作基线",
-    "指标：覆盖率（断层被命中）与命中率（线性体靠断层）",
-], size=9.2, gap=0.58)
-textbox(s, 7.82, 3.95, 4.9, 0.30, [("结果（留出段）", 12, NAVY, True)])
-bullets(s, 7.82, 4.29, 4.95, [
-    "2 km：覆盖 22.2%（随机 3.4%）",
-    "5 km：覆盖 56.2%（随机 7.8%），命中 50.6%（随机 8.1%）",
-    "10 km：72.9%（随机 16.0%）",
-], size=9.2, gap=0.56)
-textbox(s, 7.82, 5.95, 4.85, 0.30,
-        [("频带（5–20 km）与海域断层编目是主要控制因素。", 8.8, GREY, False)])
-strip(s, [N("结论："), R("5 km 缓冲覆盖 56.2%"), N("，留出断层段验证")])
+picture(s, "fig_fault_validation_3.png", 0.42, 1.58, 12.49, 3.55)
+for k, (t, body) in enumerate([
+        ("验证设计", "22 条训练选参、22 条留出报告；缓冲 1–20 km；随机点同口径基线"),
+        ("结果", "2 km 22.2%（3.4%）｜5 km 56.2%（7.8%）｜10 km 72.9%（16.0%）"),
+        ("说明", "5 km 命中率 50.6%（随机 8.1%）；频带与海域断层编目是主要控制因素"),
+]):
+    x = 0.42 + k * 4.18
+    panel(s, x, 5.25, 3.98, 1.28, [NAVY, MID, RED][k])
+    textbox(s, x + 0.22, 5.35, 3.55, 0.28, [(t, 12, NAVY, True)])
+    textbox(s, x + 0.22, 5.67, 3.55, 0.80,
+            [(body, 9.0, GREY, False)], spacing=1.2)
+strip(s, [N("结论：5 km 缓冲下断层覆盖"), R("56.2%"), N("，随机基线 7.8%")])
 
 # ---------------------------------------------------------------- 8.6 结果
 s = new_slide("8.6", "反演结果：KF 与 Parker 对照", "结果", [
-    P(("分频评估 + Parker 同参数对照 + ", 13.5, GREY, False),
-      ("GMRT 独立产品交叉验证", 13.5, RED, True),
-      ("，三条线同时报告。", 13.5, GREY, False)),
+    P(("从", 13.5, GREY, False), ("分频精度、反演—真值一致性、独立地形产品", 13.5, RED, True),
+      ("三方面检验反演结果。", 13.5, GREY, False)),
 ])
-picture(s, "fig_inversion_validation_2.png", 0.42, 1.62, 6.90, 3.10)
-textbox(s, 0.50, 5.05, 6.80, 1.35, [
-    [("频段", 9, NAVY, True), ("        RMSE", 9, NAVY, True),
-     ("     corr", 9, NAVY, True)],
-    [("20–50 km", 9, GREY, False), ("      244 m", 9, GREY, False),
-     ("      0.44", 9, GREY, False)],
-    [("50–100 km", 9, GREY, False), ("     288 m", 9, GREY, False),
-     ("      0.54", 9, GREY, False)],
-    [("100–200 km", 9, GREY, False), ("    355 m", 9, GREY, False),
-     ("      0.75", 9, GREY, False)],
-], spacing=1.25)
-panel(s, 7.55, 1.62, 5.35, 4.55)
-textbox(s, 7.82, 1.72, 4.9, 0.30, [("验证设计", 12, NAVY, True)])
-bullets(s, 7.82, 2.06, 4.95, [
-    "带通 20–200 km，分频 20–50 / 50–100 / 100–200 km",
-    "Parker 用同一频带、同一密度与低通作对照",
-    "GMRT 为独立地形产品，先与 GEBCO 配准（corr 0.997）",
-], size=9.2, gap=0.58)
-textbox(s, 7.82, 3.95, 4.9, 0.30, [("结果", 12, NAVY, True)])
-bullets(s, 7.82, 4.29, 4.95, [
-    "分频 RMSE：244 / 288 / 355 m",
-    "全带：KF 650.8 m，Parker 650.7 m，corr 0.61",
-    "GMRT 交叉验证 648 m / corr 0.608",
-], size=9.2, gap=0.56)
-textbox(s, 7.82, 5.95, 4.85, 0.30,
-        [("全带误差由 100–200 km 深部场贡献；常密度与低通是主要偏差来源。", 8.8, GREY, False)])
-strip(s, [N("结论：KF 反演与 Parker 等价，"), R("20–50 km 波段 244 m")])
+picture(s, "fig_inversion_validation_3.png", 0.42, 1.58, 12.49, 3.55)
+for k, (t, body) in enumerate([
+        ("验证设计", "带通 20–200 km 与三分频；Parker 同频带、同密度、同低通对照"),
+        ("结果", "分频 244 / 288 / 355 m；全带 KF 650.8 m，Parker 650.7 m，corr 0.61"),
+        ("交叉验证", "GMRT 独立地形产品 648 m / corr 0.608；与 GEBCO 配准 corr 0.997"),
+]):
+    x = 0.42 + k * 4.18
+    panel(s, x, 5.25, 3.98, 1.28, [NAVY, MID, RED][k])
+    textbox(s, x + 0.22, 5.35, 3.55, 0.28, [(t, 12, NAVY, True)])
+    textbox(s, x + 0.22, 5.67, 3.55, 0.80,
+            [(body, 9.0, GREY, False)], spacing=1.2)
+strip(s, [N("结论：20–50 km 波段"), R("244 m"), N("，全带 651 m，与 Parker 一致")])
 
 prs.save(str(OUT))
 print("saved", OUT, "pages", len(prs.slides))
