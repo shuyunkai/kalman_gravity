@@ -237,7 +237,12 @@ def main():
 
     bm = band_metrics(h_inv_bp, h_bp, dx, dy)
     amp_a, amp_b = amplitude_slope(h_inv_bp, h_bp)
-    dist_pr, hi_pr, ht_pr = profile(h_inv_bp, h_bp, lon, lat,
+    h_cal = amp_a * h_inv_bp
+    rmse_cal = float(np.sqrt(np.mean((h_cal - h_bp) ** 2)))
+    corr_cal = float(np.corrcoef(h_cal.ravel(), h_bp.ravel())[0, 1])
+    print(f"   amplitude slope = {amp_a:.2f} -> calibrated RMSE={rmse_cal:.1f} m, "
+          f"corr={corr_cal:.3f}")
+    dist_pr, hi_pr, ht_pr = profile(h_cal, h_bp, lon, lat,
                                     (143.5, 39.0), (143.5, 33.0))
     print(f"   amplitude slope = {amp_a:.2f}")
 
@@ -330,6 +335,7 @@ def main():
         f"  参考深度 z0 = {z0:.0f} m，密度差 ρ = {best_rho:.0f} kg/m³（扫描选定）",
         f"  正演校验：corr = {corr_fwd:.3f}，振幅比 = {amp_ratio:.3f}",
         f"  反演精度：RMSE = {rmse:.1f} m，corr = {corr_h:.3f}，振幅斜率 = {amp_a:.2f}",
+        f"  振幅标定后：RMSE = {rmse_cal:.1f} m，corr = {corr_cal:.3f}",
         *[f"    {b['band']}: RMSE {b['rmse']:.0f} m, corr {b['corr']:.2f}, "
           f"振幅比 {b['amp']:.2f}" for b in bm],
         f"  残差收敛：{', '.join(f'{v:.2f}' for v in hist)} mGal",
