@@ -162,7 +162,7 @@ def densify(lines, step_km=2.0):
             dx = (x1 - x0) * KM_PER_DEG * np.cos(np.radians((y0 + y1) / 2))
             dy = (y1 - y0) * KM_PER_DEG
             n = max(1, int(np.hypot(dx, dy) / step_km))
-            t = np.linspace(0, 1, n, endpoint=False)
+            t = np.linspace(0, 1, n + 1)
             lons.append(x0 + t * (x1 - x0))
             lats.append(y0 + t * (y1 - y0))
     if not lons:
@@ -174,21 +174,36 @@ def fault_match(mask, fault_lon, fault_lat, lon, lat, radius_km=20.0,
                 n_random=4000, seed=0):
     """线性体与公开断层的吻合率。
 
-    recall    = 断层点中，20 km 内有线性体的比例
-    precision = 线性体像元中，20 km 内有断层的比例
-    同时给随机点基线。
+    recall    = 断层点中，radius_km 内有线性体的比例
+    precision = 线性体像元中，radius_km 内有断层的比例
+
+    随机基线在**断层包络**内抽样（不是整个研究区），否则断层只占一小块时
+    基线会被稀释、富集倍数虚高。断定点也裁到研究区内。
     """
     lp = _mask_points_km(mask, lon, lat)
     tree_l = cKDTree(lp)
+
+    inside = ((fault_lon >= lon.min()) & (fault_lon <= lon.max())
+              & (fault_lat >= lat.min()) & (fault_lat <= lat.max()))
+    fault_lon = fault_lon[inside]
+    fault_lat = fault_lat[inside]
     fx, fy = _xy(fault_lon, fault_lat)
     fp = np.column_stack([fx, fy])
     tree_f = cKDTree(fp)
     d_f, _ = tree_l.query(fp)
     d_l, _ = tree_f.query(lp)
 
+    # 断层包络（度）+ 10% 余量，并限制在研究区内
+    span_lon = max(fault_lon.max() - fault_lon.min(), 0.1)
+    span_lat = max(fault_lat.max() - fault_lat.min(), 0.1)
+    lo0 = max(lon.min(), fault_lon.min() - 0.1 * span_lon)
+    lo1 = min(lon.max(), fault_lon.max() + 0.1 * span_lon)
+    la0 = max(lat.min(), fault_lat.min() - 0.1 * span_lat)
+    la1 = min(lat.max(), fault_lat.max() + 0.1 * span_lat)
+
     rng = np.random.default_rng(seed)
-    rx = rng.uniform(lon.min(), lon.max(), n_random)
-    ry = rng.uniform(lat.min(), lat.max(), n_random)
+    rx = rng.uniform(lo0, lo1, n_random)
+    ry = rng.uniform(la0, la1, n_random)
     rp = np.column_stack(_xy(rx, ry))
     dr_l, _ = tree_l.query(rp)
     dr_f, _ = tree_f.query(rp)

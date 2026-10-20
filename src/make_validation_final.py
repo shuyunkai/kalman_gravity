@@ -66,34 +66,15 @@ def fault_three():
     b = bandpass(g, dx, dy, 5e3, 20e3)
     mask = filter_lineaments(lineament_mask(b, dx, dy, pct=70) & (bathy < 0),
                              min_area=20, min_elong=1.8)
-    # 公平基线：随机点抽在断层包络内，而不是整个大区域
-    fx = np.concatenate([a[:, 0] for a in test])
-    fy = np.concatenate([a[:, 1] for a in test])
-    rng2 = np.random.default_rng(1)
-    pad = 0.1
-    rx = rng2.uniform(fx.min() - pad, fx.max() + pad, 5000)
-    ry = rng2.uniform(fy.min() - pad, fy.max() + pad, 5000)
-
-    lp = _mask_points_km(mask, lon, lat)
-    tree_l = cKDTree(lp)
-    fX, fY = _xy(tx, ty)
-    fp = np.column_stack([fX, fY])
-    tree_f = cKDTree(fp)
-    rX, rY = _xy(rx, ry)
-    rp = np.column_stack([rX, rY])
-
-    d_fault, _ = tree_l.query(fp)
-    d_rand_l, _ = tree_l.query(rp)
-    d_line, _ = tree_f.query(lp)
-    d_rand_f, _ = tree_f.query(rp)
 
     radii = np.arange(1, 21)
     cov, rc, pre, prc = [], [], [], []
     for r in radii:
-        cov.append(np.mean(d_fault <= r) * 100)
-        rc.append(np.mean(d_rand_l <= r) * 100)
-        pre.append(np.mean(d_line <= r) * 100)
-        prc.append(np.mean(d_rand_f <= r) * 100)
+        st = fault_match(mask, tx, ty, lon, lat, radius_km=float(r))
+        cov.append(st["recall"] * 100)
+        rc.append(st["recall_random"] * 100)
+        pre.append(st["precision"] * 100)
+        prc.append(st["precision_random"] * 100)
 
     fig, axes = plt.subplots(1, 3, figsize=(14.6, 3.9), dpi=220,
                              gridspec_kw={"width_ratios": [1, 1, 1.5]})
