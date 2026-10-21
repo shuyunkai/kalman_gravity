@@ -315,6 +315,54 @@ def fault_method_figure():
     print("saved", p)
 
 
+def parker_principle_figure():
+    f = np.load(ROOT / "output_real" / "test_field_15s_jodc.npz")
+    g = f["g15"]; bathy = f["bathy"]; lon = f["lon"]; lat = f["lat"]
+    dx = float(lon[1] - lon[0]) * 111320 * np.cos(np.radians(lat.mean()))
+    dy = float(lat[1] - lat[0]) * 111320
+    z0 = float(-np.median(bathy))
+    dg = bp(g, dx, dy, 20e3, 200e3)
+    h, hist = parker_inversion(dg, dx, dy, 2200.0, z0,
+                               n_iter=8, lam_min=25e3, relax=0.6, verbose=False)
+
+    fig, axes = plt.subplots(1, 4, figsize=(14.6, 3.7), dpi=220)
+    ext = [lon[0], lon[-1], lat[0], lat[-1]]
+    v = np.percentile(np.abs(dg), 99)
+    axes[0].imshow(dg, cmap="RdBu_r", origin="lower", vmin=-v, vmax=v,
+                   extent=ext, aspect="auto")
+    axes[0].set_title("(a) 重力 20–200 km", fontsize=10)
+    v = np.percentile(h, [2, 98])
+    axes[1].imshow(h, cmap="Blues_r", origin="lower", vmin=v[0], vmax=v[1],
+                   extent=ext, aspect="auto")
+    axes[1].set_title("(b) 反演地形", fontsize=10)
+    axes[2].plot(np.arange(1, len(hist) + 1), hist, "o-", color=NAVY, lw=1.5)
+    axes[2].set_xlabel("迭代次数"); axes[2].set_ylabel("残差 (mGal)")
+    axes[2].set_title("(c) 残差收敛", fontsize=10)
+    axes[2].grid(alpha=0.3)
+    q = bp(z0 + bathy, dx, dy, 20e3, 200e3)
+    inner = np.zeros_like(bathy, dtype=bool)
+    inner[40:-40, 40:-40] = True
+    m = (bathy < -2000) & inner & np.isfinite(q) & np.isfinite(h)
+    axes[3].hexbin(q[m][::15], h[m][::15], gridsize=40, cmap="viridis",
+                   bins="log", mincnt=1)
+    lo, hi = np.percentile(np.r_[q[m], h[m]], [1, 99])
+    axes[3].plot([lo, hi], [lo, hi], "r--", lw=1)
+    rmse = float(np.sqrt(np.mean((h[m] - q[m]) ** 2)))
+    corr = float(np.corrcoef(h[m], q[m])[0, 1])
+    axes[3].set_xlabel("真值地形 (m)"); axes[3].set_ylabel("反演 (m)")
+    axes[3].set_title("(d) 反演—真值", fontsize=10)
+    axes[3].text(0.05, 0.92, f"RMSE {rmse:.0f} m\ncorr {corr:.2f}",
+                 transform=axes[3].transAxes, fontsize=8, va="top", color="white",
+                 bbox=dict(fc=NAVY, ec="none", alpha=0.8))
+    for ax in axes:
+        ax.tick_params(labelsize=7)
+    fig.tight_layout()
+    p = OUT / "fig_parker_principle.png"
+    fig.savefig(p, bbox_inches="tight")
+    plt.close(fig)
+    print("saved", p)
+
+
 def flow_figure():
     fig, ax = plt.subplots(figsize=(12.9, 4.8), dpi=240)
     ax.set_xlim(0, 12.9); ax.set_ylim(0.1, 4.85); ax.axis("off")
@@ -396,4 +444,5 @@ if __name__ == "__main__":
     fault_figure()
     fault_method_figure()
     inversion_figure()
+    parker_principle_figure()
     flow_figure()

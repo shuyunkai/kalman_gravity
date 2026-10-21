@@ -151,23 +151,22 @@ for k, (t, body) in enumerate([
 strip(s, [N("常规图像算法，输入是"), R("KF 重建场")])
 
 # ---------------------------------------------------------------- 7.3 原理
-s = new_slide("7.3", "KF 反演：谱域状态与增益", "方法", [
-    P(("谱域 KF 与标准 Parker 反演等价：逐波数做增益、", 13.5, GREY, False),
-      ("无需矩阵求逆", 13.5, RED, True),
-      ("；正式结果用 Parker，KF 谱域作对照。", 13.5, GREY, False)),
+s = new_slide("7.3", "Parker–Oldenburg 反演", "方法", [
+    P(("重力谱经 ", 13.5, GREY, False), ("Parker 正演迭代", 13.5, RED, True),
+      ("反解地形；KF 谱域增益与之一致，仅作对照。", 13.5, GREY, False)),
 ])
-picture(s, "fig_kf_inversion_gain.png", 0.42, 1.60, 11.00, 3.50)
+picture(s, "fig_parker_principle.png", 0.42, 1.55, 12.49, 3.55)
 for k, (t, body) in enumerate([
-        ("状态", "H(k)：地形谱系数；先验 P₀(k) 为幂律谱"),
-        ("观测", "D(k)：重力谱；噪声 R 由重力精度给定"),
-        ("增益", "K=P₀A/(A²P₀+R)，等价于阻尼低通"),
+        ("正演", "Δg(k) 由地形谱 h 的幂次项求和，含 e^(−kz₀)"),
+        ("反演", "逐波数反解，迭代 8 次，低通 25 km，松弛 0.6"),
+        ("对照", "KF 谱域增益 K=P₀A/(A²P₀+R)，结果与 Parker 一致"),
 ]):
     x = 0.42 + k * 4.18
     panel(s, x, 5.20, 3.98, 1.28, [NAVY, MID, RED][k])
     textbox(s, x + 0.22, 5.30, 3.55, 0.28, [(t, 12, NAVY, True)])
     textbox(s, x + 0.22, 5.62, 3.55, 0.80,
             [(body, 9.5, GREY, False)], spacing=1.25)
-strip(s, [N("观测方程换为"), R("Parker 正演"), N("，预测换为谱域先验")])
+strip(s, [N("标准 Parker–Oldenburg 反演，"), R("KF 谱域仅作对照")])
 
 # ---------------------------------------------------------------- 6.2 方法总览
 s = new_slide("6.2", "方法总览：KF 驱动的三项任务", "流程", [
