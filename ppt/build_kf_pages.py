@@ -10,7 +10,7 @@ from pptx.util import Inches, Pt
 
 ROOT = Path(__file__).parent
 FIGS = ROOT.parent / "output_real" / "three_parts"
-OUT = ROOT / "KF方法与结果_五页.pptx"
+OUT = ROOT / "KF方法与结果_六页.pptx"
 
 NAVY = RGBColor(0x16, 0x36, 0x5C); MID = RGBColor(0x4A, 0x7A, 0xA7)
 LIGHT = RGBColor(0xD8, 0xE0, 0xEC); GREY = RGBColor(0x5B, 0x65, 0x73)
@@ -205,7 +205,40 @@ for k, (t, body) in enumerate([
             [(body, 9.0, GREY, False)], spacing=1.2)
 strip(s, [N("结论：20–50 km 波段"), R("244 m"), N("，全带 651 m，与 Parker 一致")])
 
+# ---------------------------------------------------------------- 8.7 跨区域
+s = new_slide("8.7", "跨区域断裂验证", "结果", [
+    P(("三个海域窗口、同一套 KF + 5–20 km 流程与匹配口径，比较", 13.5, GREY, False),
+      ("样本量与信号强弱", 13.5, RED, True), ("。", 13.5, GREY, False)),
+])
+rows = [
+    ("区域", "断层(条)", "海域(条)", "5 km 覆盖", "随机基线"),
+    ("GM9 海域", "44", "44", "61.6%", "26.0%"),
+    ("爱琴海", "161", "99", "24.3%", "20.5%"),
+    ("加州近海", "233", "78", "0%", "0%"),
+]
+for i, r in enumerate(rows):
+    y = 1.70 + i * 0.52
+    if i == 0:
+        rect(s, 0.42, y - 0.06, 7.6, 0.46, NAVY)
+    elif i % 2 == 0:
+        rect(s, 0.42, y - 0.06, 7.6, 0.46, PALE)
+    for j, txt in enumerate(r):
+        textbox(s, 0.55 + j * 1.52, y, 1.45, 0.34,
+                [(txt, 10.5, WHITE if i == 0 else GREY, i == 0)], spacing=1.0)
+textbox(s, 0.42, 3.95, 7.6, 0.32,
+        [("对照：GM9 为 22 条留出断层段；爱琴海 10,151 个海域断层点；加州 2,526 个。", 8.8, GREY, False)])
+panel(s, 8.30, 1.64, 4.60, 4.55)
+textbox(s, 8.56, 1.74, 4.1, 0.30, [("区域对比结论", 12, NAVY, True)])
+bullets(s, 8.56, 2.10, 4.15, [
+    "GM9：信号最强，但仅 22 条留出，样本小",
+    "爱琴海：样本大，富集仅约 1.2 倍，信号弱",
+    "加州：线性体与断层空间不重叠，0%",
+    "结论对样本与频带敏感，需分区报告",
+], size=9.0, gap=0.92)
+strip(s, [N("结论：方法可跨区，信号强弱取决于"), R("海域断层编目与频带匹配")])
+
 prs.save(str(OUT))
 print("saved", OUT, "pages", len(prs.slides))
+
 
 
