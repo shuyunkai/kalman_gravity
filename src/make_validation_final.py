@@ -68,19 +68,16 @@ def fault_three():
                              min_area=20, min_elong=1.8)
 
     radii = np.arange(1, 21)
-    cov, rc, pre, prc = [], [], [], []
+    cov, pre = [], []
     for r in radii:
         st = fault_match(mask, tx, ty, lon, lat, radius_km=float(r))
         cov.append(st["recall"] * 100)
-        rc.append(st["recall_random"] * 100)
         pre.append(st["precision"] * 100)
-        prc.append(st["precision_random"] * 100)
 
     fig, axes = plt.subplots(1, 3, figsize=(14.6, 3.9), dpi=220,
                              gridspec_kw={"width_ratios": [1, 1, 1.5]})
     ax = axes[0]
     ax.plot(radii, cov, "o-", color="#1F3864", lw=1.5, ms=2.5, label="留出段")
-    ax.plot(radii, rc, "s--", color="#C0392B", lw=1.1, ms=2, label="随机")
     ax.axvline(5, color="#7F8C8D", ls=":", lw=1)
     ax.set_xlabel("缓冲半径 (km)"); ax.set_ylabel("覆盖率 (%)")
     ax.set_title("(a) 断层覆盖率", fontsize=10)
@@ -88,7 +85,6 @@ def fault_three():
 
     ax = axes[1]
     ax.plot(radii, pre, "o-", color="#1F3864", lw=1.5, ms=2.5, label="线性体")
-    ax.plot(radii, prc, "s--", color="#C0392B", lw=1.1, ms=2, label="随机")
     ax.axvline(5, color="#7F8C8D", ls=":", lw=1)
     ax.set_xlabel("缓冲半径 (km)"); ax.set_ylabel("命中率 (%)")
     ax.set_title("(b) 线性体命中率", fontsize=10)
