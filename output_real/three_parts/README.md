@@ -409,3 +409,18 @@ GM9 窗口，同一套 5–20 km 线状体提取：
 - 0.5 km 4.7% vs 4.1%，2 km 13.4% vs 11.9%，5 km 38.4% vs 28.0%（约 1.4 倍）。
 说明即使 40 m 地形，自动线状体也只给出弱信号；断层编目含隐伏/无地貌显示的断层，单靠地形不够。
 
+
+## 数据获取路径（更正）
+
+之前说“拿不到”不准确：多数是**免费但需账号/申请**，不是封闭。
+
+| 数据 | 论文常见获取方式 | 入口 | 本机网络 |
+|---|---|---|---|
+| SWOT KaRIn | NASA PO.DAAC 或 AVISO，免费注册后下载 | podaac.jpl.nasa.gov / aviso.altimetry.fr | AVISO 可达；PO.DAAC 连接失败 |
+| 船测重力 | NCEI GEODAS 查询下载；JODC 申请；MGDS | ncei.noaa.gov / jodc.go.jp / marine-geo.org | JODC、MGDS 可达；NCEI 连接失败 |
+| 航空重力 | 国家/机构调查，申请或合作 | 各国地调局 | — |
+| 海域断层 | BOEM 公开数据、BGS 许可、NIED 申请、GNS 开放 | data.boem.gov / bgs.ac.uk / gbank.gsj.jp / gns.cri.nz | BOEM 连接失败；GNS 可用 |
+| 全球断层 | GEM GAF-DB 开放 | github.com/GEMScienceTools | 可用 |
+
+结论：不是“没有数据”，是**需要注册/申请或换网络**；本机对 NCEI/PO.DAAC/BOEM 的连接被阻断。
+
