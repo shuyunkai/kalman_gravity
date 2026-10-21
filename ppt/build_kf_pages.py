@@ -174,7 +174,7 @@ s = new_slide("8.5", "断裂识别结果：GM9 海域验证", "结果", [
     P(("以", 13.5, GREY, False), ("留出断层段", 13.5, RED, True),
       ("检验 5–20 km 线性体与 GM9 海域断层的空间吻合度。", 13.5, GREY, False)),
 ])
-picture(s, "fig_fault_validation_3.png", 0.42, 1.58, 12.49, 3.55)
+picture(s, "fig_paper_fault_validation.png", 0.42, 1.58, 12.49, 3.55)
 for k, (t, body) in enumerate([
         ("验证设计", "22 条训练选参、22 条留出报告；缓冲 1–20 km；覆盖率随缓冲半径变化"),
         ("结果", "5 km 61.6%｜10 km 74.1%｜20 km 74.4%"),
@@ -192,18 +192,18 @@ s = new_slide("8.6", "反演结果：KF 与 Parker 对照", "结果", [
     P(("从", 13.5, GREY, False), ("分频精度、反演—真值一致性、独立地形产品", 13.5, RED, True),
       ("三方面检验反演结果。", 13.5, GREY, False)),
 ])
-picture(s, "fig_inversion_validation_3.png", 0.42, 1.58, 12.49, 3.55)
+picture(s, "fig_paper_inversion_validation.png", 0.42, 1.58, 12.49, 3.55)
 for k, (t, body) in enumerate([
         ("验证设计", "带通 20–200 km 与三分频；Parker 同频带、同密度、同低通对照"),
-        ("结果", "20–50 km 244 m｜50–100 km 288 m｜100–200 km 355 m；20–200 km 651 m"),
-        ("交叉验证", "深水 20–200 km 544 m / corr 0.67；GMRT 独立地形 648 m / 0.608"),
+        ("结果", "20–50 km 113 m｜50–100 km 190 m｜100–200 km 363 m；20–200 km 388 m"),
+        ("交叉验证", "内区去 40 px 边缘，corr 0.79；GMRT 独立地形 648 m / 0.608"),
 ]):
     x = 0.42 + k * 4.18
     panel(s, x, 5.25, 3.98, 1.28, [NAVY, MID, RED][k])
     textbox(s, x + 0.22, 5.35, 3.55, 0.28, [(t, 12, NAVY, True)])
     textbox(s, x + 0.22, 5.67, 3.55, 0.80,
             [(body, 9.0, GREY, False)], spacing=1.2)
-strip(s, [N("结论：20–50 km RMSE"), R("244 m"), N("，20–200 km 651 m（深水 544 m）")])
+strip(s, [N("结论：20–50 km RMSE"), R("113 m"), N("，20–200 km 388 m，corr 0.79")])
 
 # ---------------------------------------------------------------- 8.7 跨区域
 s = new_slide("8.7", "跨区域断裂验证", "结果", [
