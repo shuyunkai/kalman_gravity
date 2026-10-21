@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from bathymetry_inversion import bandpass as bp, parker_inversion
 from kf_inversion import spectral_kf_inversion
-from scale_decomposition import bandpass, lineament_mask, filter_lineaments
+from scale_decomposition import bandpass, lineament_mask, filter_lineaments, thg
 from fault_validation import densify, fault_match, lineament_segments, _mask_points_km, _xy
 
 ROOT = Path(__file__).parent.parent
@@ -263,6 +263,58 @@ def inversion_figure():
     print("saved", p)
 
 
+def fault_method_figure():
+    g, bathy, lon, lat = build_gm9()
+    dx = float(lon[1] - lon[0]) * 111320 * np.cos(np.radians(lat.mean()))
+    dy = float(lat[1] - lat[0]) * 111320
+    b = bandpass(g, dx, dy, 5e3, 20e3)
+    t = thg(b, dx, dy) * 1000.0
+    mask = filter_lineaments(lineament_mask(b, dx, dy, pct=70) & (bathy < 0),
+                             20, 1.8)
+    lines = []
+    for f in json.loads((OUT / "nz_gm9_offshore.json").read_text(encoding="utf-8"))["features"]:
+        geo = f.get("geometry") or {}
+        if geo.get("type") != "LineString":
+            continue
+        a = np.asarray(geo["coordinates"], float)
+        if ((a[:, 0] >= lon.min()) & (a[:, 0] <= lon.max()) &
+                (a[:, 1] >= lat.min()) & (a[:, 1] <= lat.max())).any():
+            lines.append(a)
+
+    fig, axes = plt.subplots(1, 4, figsize=(14.6, 3.7), dpi=220)
+    ext = [lon[0], lon[-1], lat[0], lat[-1]]
+    v = np.percentile(np.abs(g), 99)
+    axes[0].imshow(g, cmap="RdBu_r", origin="lower", vmin=-v, vmax=v,
+                   extent=ext, aspect="auto")
+    axes[0].set_title("(a) KF 15″ 场", fontsize=10)
+    v = np.percentile(np.abs(b), 99)
+    axes[1].imshow(b, cmap="RdBu_r", origin="lower", vmin=-v, vmax=v,
+                   extent=ext, aspect="auto")
+    axes[1].set_title("(b) 5–20 km 带通", fontsize=10)
+    vth = np.percentile(t, 99)
+    axes[2].imshow(t, cmap="magma", origin="lower", vmin=0, vmax=vth,
+                   extent=ext, aspect="auto")
+    axes[2].set_title("(c) THG (mGal/km)", fontsize=10)
+    depth = np.where(bathy < 0, bathy, 0.0)
+    rgb = LightSource(azdeg=315, altdeg=45).shade(
+        depth, cmap=plt.cm.Blues_r, vmin=-5000, vmax=0, blend_mode="soft")
+    axes[3].imshow(rgb, origin="lower", extent=ext, aspect="auto")
+    for arr in lines:
+        axes[3].plot(arr[:, 0], arr[:, 1], color=RED, lw=1.0)
+    ys, xs = np.where(mask)
+    axes[3].scatter(lon[xs], lat[ys], s=0.35, c="#FFD400", linewidths=0)
+    axes[3].set_title("(d) 线性体与断层", fontsize=10)
+    for ax in axes:
+        ax.set_xlabel("经度 (°E)", fontsize=8)
+        ax.tick_params(labelsize=7)
+    axes[0].set_ylabel("纬度 (°N)", fontsize=8)
+    fig.tight_layout()
+    p = OUT / "fig_fault_method_4.png"
+    fig.savefig(p, bbox_inches="tight")
+    plt.close(fig)
+    print("saved", p)
+
+
 def flow_figure():
     fig, ax = plt.subplots(figsize=(12.9, 4.8), dpi=240)
     ax.set_xlim(0, 12.9); ax.set_ylim(0.1, 4.85); ax.axis("off")
@@ -342,5 +394,6 @@ def flow_figure():
 
 if __name__ == "__main__":
     fault_figure()
+    fault_method_figure()
     inversion_figure()
     flow_figure()
