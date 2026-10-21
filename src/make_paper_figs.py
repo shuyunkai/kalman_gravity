@@ -14,7 +14,7 @@ from scipy.spatial import cKDTree
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from bathymetry_inversion import bandpass as bp
+from bathymetry_inversion import bandpass as bp, parker_inversion
 from kf_inversion import spectral_kf_inversion
 from scale_decomposition import bandpass, lineament_mask, filter_lineaments
 from fault_validation import densify, fault_match, lineament_segments, _mask_points_km, _xy
@@ -163,10 +163,11 @@ def inversion_figure():
     dy = float(lat[1] - lat[0]) * 111320
     z0 = float(-np.median(bathy))
     dg = bp(g, dx, dy, 20e3, 200e3)
-    h, _ = spectral_kf_inversion(dg, dx, dy, 2200.0, z0, prior_rms=2500.0,
-                                 n_iter=8, lam_min=25e3, relax=0.6)
+    out = parker_inversion(dg, dx, dy, 2200.0, z0,
+                           n_iter=8, lam_min=25e3, relax=0.6)
+    h = out[0] if isinstance(out, tuple) else out
     target = z0 + bathy
-    h_bp = bp(h, dx, dy, 20e3, 200e3)
+    h_bp = h  # Parker 输出已是 20–200 km 带内
     t_bp = bp(target, dx, dy, 20e3, 200e3)
     deep = bathy < -2000
     inner = np.zeros_like(deep); inner[40:-40, 40:-40] = True
@@ -263,42 +264,65 @@ def inversion_figure():
 
 
 def flow_figure():
-    fig, ax = plt.subplots(figsize=(13.2, 5.2), dpi=220)
-    ax.set_xlim(0, 13.2); ax.set_ylim(0, 5.2); ax.axis("off")
+    fig, ax = plt.subplots(figsize=(12.9, 4.8), dpi=240)
+    ax.set_xlim(0, 12.9); ax.set_ylim(0.1, 4.85); ax.axis("off")
 
-    def box(x, y, w, h, txt, fc, ec=NAVY, fs=9, tc="white"):
-        ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.03,rounding_size=0.12",
-                                    fc=fc, ec=ec, lw=1.2))
-        ax.text(x + w / 2, y + h / 2, txt, ha="center", va="center", fontsize=fs, color=tc)
+    def box(x, y, w, h, txt, fc, fs=8.5, tc="white", ec=NAVY):
+        ax.add_patch(FancyBboxPatch((x, y), w, h,
+                                    boxstyle="round,pad=0.03,rounding_size=0.10",
+                                    fc=fc, ec=ec, lw=1.1))
+        ax.text(x + w / 2, y + h / 2, txt, ha="center", va="center",
+                fontsize=fs, color=tc, linespacing=1.25)
 
     def arrow(x0, y0, x1, y1):
         ax.add_patch(FancyArrowPatch((x0, y0), (x1, y1), arrowstyle="-|>",
-                                     mutation_scale=12, color=GREY, lw=1.2))
+                                     mutation_scale=11, color=GREY, lw=1.1,
+                                     shrinkA=0, shrinkB=0))
 
-    box(0.2, 2.0, 1.9, 1.2, "卫星重力\nSSV 1′", "#D6E2F0", tc=NAVY)
-    box(0.2, 0.5, 1.9, 1.2, "船测重力\njp_data + JODC", "#D6E2F0", tc=NAVY)
-    box(2.6, 1.25, 2.0, 1.7, "卡尔曼滤波\n预测 + 更新\n6 轮 + RTS", NAVY)
-    box(5.0, 1.25, 1.9, 1.7, "15″ 重力场\n(网格 1.85 km)", "#2E5C8A")
-    box(7.3, 3.0, 2.1, 1.3, "尺度分解\nx₁+x₂+x₃\n16/4/1 px", "#7A4E2D")
-    box(7.3, 0.8, 2.1, 1.3, "谱域反演\nParker + KF", "#7A4E2D")
-    box(9.9, 3.0, 1.6, 1.3, "线性体\n(5–20 km)", "#8A5A3B")
-    box(9.9, 0.8, 1.6, 1.3, "海底地形\n20–200 km", "#8A5A3B")
-    box(11.9, 3.0, 1.1, 1.3, "断层\n验证", "#E8D5C4", tc=NAVY)
-    box(11.9, 0.8, 1.1, 1.3, "地形\n验证", "#E8D5C4", tc=NAVY)
+    # 数据
+    box(0.20, 3.70, 1.75, 0.55, "卫星重力 SSV 1′", "#D6E2F0", tc=NAVY)
+    box(0.20, 3.05, 1.75, 0.55, "船测重力\njp_data + JODC", "#D6E2F0", tc=NAVY)
+    box(0.20, 2.40, 1.75, 0.55, "地形 GEBCO / GMRT", "#D6E2F0", tc=NAVY)
 
-    arrow(2.1, 2.6, 2.6, 2.3); arrow(2.1, 1.1, 2.6, 1.8)
-    arrow(4.6, 2.1, 5.0, 2.1)
-    arrow(6.9, 2.5, 7.3, 3.4); arrow(6.9, 1.7, 7.3, 1.4)
-    arrow(9.4, 3.6, 9.9, 3.6); arrow(9.4, 1.4, 9.9, 1.4)
-    arrow(11.5, 3.6, 11.9, 3.6); arrow(11.5, 1.4, 11.9, 1.4)
+    # 重建
+    box(2.30, 2.95, 1.80, 1.35, "空间 KF\n预测 + 更新\n6 轮 + RTS", NAVY, fs=9)
+    box(4.50, 2.95, 1.80, 1.35, "15″ 重力场\n1.85 km 网格", "#2E5C8A", fs=9)
 
-    ax.text(0.2, 4.55, "数据", fontsize=11, color=NAVY, fontweight="bold")
-    ax.text(2.6, 4.55, "重建", fontsize=11, color=NAVY, fontweight="bold")
-    ax.text(7.3, 4.55, "尺度分解 / 反演", fontsize=11, color=NAVY, fontweight="bold")
-    ax.text(11.9, 4.55, "验证", fontsize=11, color=NAVY, fontweight="bold")
-    ax.plot([5.0, 5.0], [0.35, 4.85], color="#C9D9EA", lw=1, ls="--")
-    ax.plot([9.7, 9.7], [0.35, 4.85], color="#C9D9EA", lw=1, ls="--")
-    ax.plot([11.75, 11.75], [0.35, 4.85], color="#C9D9EA", lw=1, ls="--")
+    # 断裂支路
+    box(6.85, 1.80, 1.95, 1.00, "多尺度分解\nx1 / x2 / x3\nσ = 16/4/1 px", "#7A4E2D")
+    box(9.10, 1.80, 1.70, 1.00, "线性体\n5–20 km THG", "#8A5A3B")
+    box(11.10, 1.80, 1.60, 1.00, "GM9 断层\n5 km 61.6%", "#E8D5C4", tc=NAVY)
+
+    # 反演支路
+    box(6.85, 0.45, 1.95, 1.00, "Parker 反演\n20–200 km\n(KF 谱域对照)", "#7A4E2D")
+    box(9.10, 0.45, 1.70, 1.00, "海底地形\n20–200 km", "#8A5A3B")
+    box(11.10, 0.45, 1.60, 1.00, "独立验证\nRMSE 372 m", "#E8D5C4", tc=NAVY)
+
+    # 箭头
+    arrow(1.95, 3.95, 2.30, 3.70)
+    arrow(1.95, 3.32, 2.30, 3.55)
+    arrow(1.95, 2.68, 2.30, 3.15)
+    arrow(4.10, 3.62, 4.50, 3.62)
+    arrow(6.30, 3.35, 6.85, 2.55)
+    arrow(6.30, 2.95, 6.85, 1.20)
+    arrow(8.80, 2.30, 9.10, 2.30)
+    arrow(10.80, 2.30, 11.10, 2.30)
+    arrow(8.80, 0.95, 9.10, 0.95)
+    arrow(10.80, 0.95, 11.10, 0.95)
+
+    # 分区标题
+    ax.text(0.20, 4.55, "① 数据与重力场重建", fontsize=10.5, color=NAVY,
+            fontweight="bold")
+    ax.text(6.85, 3.02, "② 断裂识别", fontsize=10.5, color=NAVY,
+            fontweight="bold")
+    ax.text(6.85, 1.60, "③ 反演", fontsize=10.5, color=NAVY,
+            fontweight="bold")
+    ax.text(4.55, 4.42, "同一套 15″ 场进入两条支路", fontsize=8.2, color=GREY)
+    ax.text(11.10, 3.02, "外部编目", fontsize=8.2, color=GREY)
+    ax.text(11.10, 1.60, "独立水深", fontsize=8.2, color=GREY)
+
+    ax.plot([6.55, 6.55], [1.55, 4.40], color="#C9D9EA", lw=1, ls="--")
+    ax.plot([10.95, 10.95], [0.30, 4.40], color="#C9D9EA", lw=1, ls="--")
 
     fig.tight_layout()
     p = OUT / "fig_paper_method_flow.png"
