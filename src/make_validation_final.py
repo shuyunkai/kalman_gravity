@@ -8,7 +8,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
-from scipy.ndimage import zoom as sp_zoom
+from scipy.ndimage import zoom as sp_zoom, gaussian_filter
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -16,6 +16,7 @@ from run_pipeline import load_ssv_region
 from three_method_compare import load_bathy_15s
 from utils import cell_centers
 from kf_novel import BathyPriorKF
+from multiscale_kf import MultiScaleKF
 from scale_decomposition import bandpass, lineament_mask, filter_lineaments
 from fault_validation import densify, fault_match, _mask_points_km, _xy
 from scipy.spatial import cKDTree
