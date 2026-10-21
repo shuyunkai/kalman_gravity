@@ -36,6 +36,8 @@ def main():
     ap.add_argument("--short-name", default="SWOT_L2_LR_SSH_D")
     ap.add_argument("--out", default=r"D:\gravity\kalman_gravity\data\swot")
     ap.add_argument("--limit", type=int, default=2)
+    ap.add_argument("--product", default="Basic",
+                    help="只下文件名含 _Basic_ 的（Basic/Expert/WindWave/Unsmoothed）")
     args = ap.parse_args()
 
     token = get_token()
@@ -49,8 +51,16 @@ def main():
         "temporal": f"{args.start}T00:00:00Z,{args.end}T23:59:59Z",
         "page_size": 100,
     }
-    r = requests.get(CMR, params=params, timeout=60)
-    r.raise_for_status()
+    for attempt in range(5):
+        try:
+            r = requests.get(CMR, params=params, timeout=120)
+            r.raise_for_status()
+            break
+        except Exception as e:
+            print("CMR retry", attempt + 1, type(e).__name__)
+            time.sleep(5 * (attempt + 1))
+    else:
+        sys.exit("CMR 连接失败")
     entries = r.json()["feed"]["entry"]
     print("granules found:", len(entries))
 
@@ -59,7 +69,8 @@ def main():
         for l in e.get("links", []):
             href = l.get("href", "")
             if l.get("rel", "").endswith("/data#") and href.endswith(".nc"):
-                links.append(href)
+                if f"_{args.product}_" in href:
+                    links.append(href)
     print("netcdf links:", len(links))
 
     n = 0
@@ -70,14 +81,24 @@ def main():
             print("skip", name)
             continue
         print("download", name)
-        with requests.get(url, headers=headers, stream=True, timeout=300) as resp:
-            resp.raise_for_status()
-            tmp = dst.with_suffix(".part")
-            with open(tmp, "wb") as fh:
-                for chunk in resp.iter_content(1 << 20):
-                    if chunk:
-                        fh.write(chunk)
-            tmp.replace(dst)
+        for attempt in range(4):
+            try:
+                with requests.get(url, headers=headers, stream=True,
+                                  timeout=600) as resp:
+                    resp.raise_for_status()
+                    tmp = dst.with_suffix(".part")
+                    with open(tmp, "wb") as fh:
+                        for chunk in resp.iter_content(1 << 20):
+                            if chunk:
+                                fh.write(chunk)
+                    tmp.replace(dst)
+                break
+            except Exception as e:
+                print("  retry", attempt + 1, type(e).__name__)
+                time.sleep(5 * (attempt + 1))
+        else:
+            print("  give up", name)
+            continue
         n += 1
         print("  size MB", round(dst.stat().st_size / 1e6, 1))
         if n >= args.limit:
