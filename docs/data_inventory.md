@@ -46,3 +46,11 @@ D:\gravity\kalman_gravity\data\
 
 CMR 单页上限 200 条（=50 个 granule × 4 产品），3 月的数据还需翻页继续下。
 
+
+## SWOT 下载完成（2024-01–06）
+
+- 180 个 Basic granule，1.63 GB；
+- 日本窗口有效像素 2,094,603；
+- SSH 12.7–37.9 m，SSHA ±2.5 m，测高不确定度中位 2.8 mm；
+- 缓存 data/swot/swot_japan_subset.npz。
+
