@@ -17,9 +17,9 @@ def build_ship(data, use_jodc=False):
     ship = data["ship_grav"].astype(float).copy()
     mask = data["train_mask"].copy()
     if use_jodc:
-        d = np.load(ROOT / "data" / "ship_gravity" / "jodc_gravity.npz")
+        d = np.load(ROOT / "data" / "ship_gravity" / "jodc_fa.npz")
         lon, lat = d["lon"], d["lat"]
-        grav = d["grav"]
+        grav = d["fa"]
         ok = np.isfinite(grav)
         ok &= (lon >= data["lon_hr"].min()) & (lon <= data["lon_hr"].max())
         ok &= (lat >= data["lat_hr"].min()) & (lat <= data["lat_hr"].max())
@@ -38,10 +38,13 @@ def main():
     vp = data["val_points"]
     vlon, vlat, vgrav = vp[:, 0], vp[:, 1], vp[:, 2]
 
-    for tag, use in (("jp_data only", False), ("jp_data + JODC", True)):
+    for tag, use, noise in (("jp only", False, 1.0),
+                            ("combined n1", True, 1.0),
+                            ("combined n5", True, 5.0),
+                            ("combined n10", True, 10.0)):
         ship, mask = build_ship(data, use)
         kf = BathyPriorKF(data["ssv_hr"].shape, data["gravity_lr"].shape,
-                          (8.0, 8.0), alpha=0.5)
+                          (8.0, 8.0), ship_noise_std=noise, alpha=0.5)
         g = kf.build(data["gravity_lr"].astype(float), ship, mask,
                      data["lon_hr"], data["lat_hr"], (141, 149), (32, 40),
                      upscale=4, bathy_15s=data["bathy_15s"], n_iter=6,
