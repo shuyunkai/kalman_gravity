@@ -8,6 +8,7 @@
 输出：output_real/three_parts/*.png + report.txt
 """
 from pathlib import Path
+import os
 import sys
 import time
 
@@ -47,7 +48,8 @@ plt.rcParams.update({
 })
 
 ROOT = Path(__file__).parent.parent
-NPZ = ROOT / "output_real" / "test_field_15s.npz"
+NPZ = Path(os.environ.get("THREE_PARTS_NPZ",
+                          str(ROOT / "output_real" / "test_field_15s.npz")))
 OUT = ROOT / "output_real" / "three_parts"
 OUT.mkdir(parents=True, exist_ok=True)
 
