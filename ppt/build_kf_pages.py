@@ -251,6 +251,38 @@ bullets(s, 8.56, 2.10, 4.15, [
 ], size=9.0, gap=0.92)
 strip(s, [N("结论：方法可跨区，信号强弱取决于"), R("海域断层编目与频带匹配")])
 
+# ---------------------------------------------------------------- 8.8 消融
+s = new_slide("8.8", "消融对比：KF 场 vs SSV 场", "结果", [
+    P(("同一套带通/THG 与 Parker，只换输入场：", 13.5, GREY, False),
+      ("KF 15″ 场 vs SSV 直接插值", 13.5, RED, True), ("。", 13.5, GREY, False)),
+])
+rows = [
+    ("指标", "KF 15″ 场", "SSV 直接插值"),
+    ("5 km 断层覆盖", "61.6%", "10.1%"),
+    ("5 km 命中率", "50.6%", "约 10%"),
+    ("20–50 km RMSE", "112 m", "113 m"),
+    ("20–200 km RMSE", "372 m", "376 m"),
+    ("corr（20–200 km）", "0.80", "0.81"),
+]
+for i, r in enumerate(rows):
+    y = 1.70 + i * 0.58
+    if i == 0:
+        rect(s, 0.42, y - 0.06, 8.2, 0.48, NAVY)
+    elif i % 2 == 0:
+        rect(s, 0.42, y - 0.06, 8.2, 0.48, PALE)
+    for j, txt in enumerate(r):
+        textbox(s, 0.55 + j * 2.75, y, 2.6, 0.34,
+                [(txt, 10.5, WHITE if i == 0 else GREY, i == 0)], spacing=1.0)
+panel(s, 8.85, 1.64, 4.05, 4.45)
+textbox(s, 9.10, 1.74, 3.6, 0.30, [("结论", 12, NAVY, True)])
+bullets(s, 9.10, 2.10, 3.65, [
+    "KF 增益集中在 5–20 km 断裂",
+    "反演 20–200 km 与 SSV 相当",
+    "5–20 km 含地形先验，需注明",
+    "因此 KF 的价值在断裂，不在反演",
+], size=9.0, gap=0.92)
+strip(s, [N("KF 的价值在"), R("5–20 km 断裂"), N("，不在 20–200 km 反演")])
+
 prs.save(str(OUT))
 print("saved", OUT, "pages", len(prs.slides))
 
