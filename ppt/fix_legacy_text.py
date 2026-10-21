@@ -2,7 +2,7 @@ from pptx import Presentation
 
 P = r"D:\gravity\kalman_gravity\ppt\卡尔曼滤波重建地球重力场_含研究内容.pptx"
 prs = Presentation(P)
-s = prs.slides[15]
+s = prs.slides[16]
 
 rules = [
     ("必须写明口径",
@@ -26,3 +26,4 @@ for sh in s.shapes:
                 break
 prs.save(P)
 print("done")
+

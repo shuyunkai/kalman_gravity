@@ -172,8 +172,8 @@ def inversion_figure():
     inner = np.zeros_like(deep); inner[40:-40, 40:-40] = True
     deep = deep & inner
 
-    fig, axes = plt.subplots(1, 4, figsize=(14.6, 3.9), dpi=220,
-                             gridspec_kw={"width_ratios": [1.15, 1, 1.25, 1]})
+    fig, axes = plt.subplots(1, 5, figsize=(14.6, 4.15), dpi=220,
+                             gridspec_kw={"width_ratios": [1.05, 0.95, 1.15, 0.9, 1.0]})
     # (a) scatter
     ax = axes[0]
     m = deep & np.isfinite(t_bp) & np.isfinite(h_bp)
@@ -230,6 +230,30 @@ def inversion_figure():
     ax.set_title("(d) 残差分布", fontsize=10)
     ax.legend(fontsize=7, frameon=False); ax.grid(alpha=0.3)
     ax.tick_params(labelsize=8)
+
+    # (e) coherence vs wavelength
+    ax = axes[4]
+    edges = [(20e3, 30e3), (30e3, 50e3), (50e3, 80e3), (80e3, 120e3),
+             (120e3, 200e3)]
+    cent, coh = [], []
+    for lo, hi in edges:
+        ha = bp(h, dx, dy, lo, hi); ta = bp(target, dx, dy, lo, hi)
+        mm = deep & np.isfinite(ha) & np.isfinite(ta)
+        coh.append(float(np.corrcoef(ha[mm], ta[mm])[0, 1]))
+        cent.append((lo + hi) / 2e3)
+    ax.plot(cent, coh, "o-", color=NAVY, lw=1.5, ms=4)
+    ax.axhline(0.5, color=RED, ls="--", lw=1.0)
+    ax.set_xscale("log")
+    ax.set_xticks([20, 30, 50, 80, 120, 200])
+    ax.set_xticklabels(["20", "30", "50", "80", "120", "200"])
+    ax.xaxis.set_minor_locator(plt.NullLocator())
+    ax.set_ylim(0, 1)
+    ax.set_xlabel("波长 (km)"); ax.set_ylabel("相干系数")
+    ax.set_title("(e) 相干性", fontsize=10)
+    ax.grid(alpha=0.3, which="both"); ax.tick_params(labelsize=8)
+    for xv, yv in zip(cent, coh):
+        ax.text(xv, min(yv + 0.06, 0.95), f"{yv:.2f}", ha="center",
+                fontsize=6.5, color=NAVY)
 
     fig.tight_layout()
     p = OUT / "fig_paper_inversion_validation.png"
