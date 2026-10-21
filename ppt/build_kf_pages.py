@@ -227,6 +227,12 @@ for i, r in enumerate(rows):
                 [(txt, 10.5, WHITE if i == 0 else GREY, i == 0)], spacing=1.0)
 textbox(s, 0.42, 3.95, 7.6, 0.32,
         [("对照：GM9 为 22 条留出断层段；爱琴海 10,151 个海域断层点；加州 2,526 个。", 8.8, GREY, False)])
+textbox(s, 0.42, 4.45, 7.6, 1.10, [
+    [("15″ 是网格分辨率，不是重力信息分辨率：", 9.2, RED, True),
+     ("KF 场与 SSV 的差异在 2–5 km 仅 0.14 mGal，", 9.2, GREY, False)],
+    [("5–20 km 与地形先验相关 0.83–0.96；", 9.2, GREY, False),
+     ("短波主要来自地形先验，不是独立重力观测。", 9.2, GREY, False)],
+], spacing=1.3)
 panel(s, 8.30, 1.64, 4.60, 4.55)
 textbox(s, 8.56, 1.74, 4.1, 0.30, [("区域对比结论", 12, NAVY, True)])
 bullets(s, 8.56, 2.10, 4.15, [
