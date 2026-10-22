@@ -292,7 +292,6 @@ rows = [
     ("指标", "KF 15″ 场", "SSV 直接插值"),
     ("10–50 km RMSE", "124 m", "131 m"),
     ("10–50 km corr", "0.82", "0.77"),
-    ("20–50 km RMSE", "91 m", "95 m"),
     ("20–200 km RMSE", "372 m", "376 m"),
 ]
 for i, r in enumerate(rows):

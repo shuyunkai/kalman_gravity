@@ -67,7 +67,7 @@ def three_tasks():
     ht = bp_inv(z0 + bathy, dx, dy, 20e3, 200e3)
     i = np.searchsorted(lat, 36.0)
     ax.plot(lat, ht[:, i], color="#1F3864", lw=1.4, label="GEBCO 带通")
-    ax.plot(lat, hi[:, i], color="#C0392B", lw=1.2, label="KF 反演")
+    ax.plot(lat, hi[:, i], color="#C0392B", lw=1.2, label="Parker 反演")
     ax.set_xlabel("纬度 (°N)"); ax.set_ylabel("相对起伏 (m)")
     ax.set_title("(c) 反演剖面（143.5°E）", fontsize=10)
     ax.legend(fontsize=7.5, frameon=False); ax.grid(alpha=0.3)

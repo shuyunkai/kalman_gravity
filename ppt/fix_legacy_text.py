@@ -34,6 +34,35 @@ for sh in s.shapes:
                 if p.runs:
                     p.runs[0].text = v
                 break
+
+# 8.4 说明句缩短，避免句号换行
+for sl in prs.slides:
+    for sh in sl.shapes:
+        if sh.has_text_frame and "相对卫星模型的改善" in sh.text_frame.text:
+            p = sh.text_frame.paragraphs[0]
+            for r in p.runs:
+                r.text = ""
+            txt = ("相对卫星模型的改善（0.15–0.50 mGal）大于相对频域融合"
+                   "（0.11–0.40 mGal）——频域融合已压缩短波，本方法仍有增益。")
+            if p.runs:
+                p.runs[0].text = txt
+            else:
+                p.add_run().text = txt
+
+# 清掉单独成段的句号
+for sl in prs.slides:
+    for sh in list(sl.shapes):
+        if not sh.has_text_frame:
+            continue
+        if sh.text_frame.text.strip() in ("。", "."):
+            sh._element.getparent().remove(sh._element)
+            continue
+        ps = sh.text_frame.paragraphs
+        for p in list(ps):
+            txt = "".join(r.text for r in p.runs).strip()
+            if txt in ("。", ".") and len(ps) > 1:
+                p._p.getparent().remove(p._p)
+
 prs.save(P)
 print("done")
 
