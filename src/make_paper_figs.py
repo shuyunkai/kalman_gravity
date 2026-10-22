@@ -301,7 +301,7 @@ def fault_method_figure():
     vth = np.percentile(ti, 99)
     axes[2].imshow(ti, cmap="inferno", origin="lower", vmin=0, vmax=vth,
                    extent=ext, aspect="auto")
-    axes[2].set_title("(c) THG (mGal/km)", fontsize=10)
+    axes[2].set_title("(c) THG 与提取脊线（青）", fontsize=9)
     axes[2].contour(lon[k:-k], lat[k:-k], m_in, levels=[0.5],
                     colors="cyan", linewidths=0.45)
     depth = np.where(bathy < 0, bathy, 0.0)
@@ -313,7 +313,12 @@ def fault_method_figure():
     ys, xs = np.where(mask)
     axes[3].scatter(lon[xs], lat[ys], s=1.6, c="#FFD400", linewidths=0)
     axes[3].set_xlim(ext[0], ext[1]); axes[3].set_ylim(ext[2], ext[3])
-    axes[3].set_title("(d) 线性体与断层", fontsize=10)
+    axes[3].set_title("(d) 提取线性体（黄）与 GM9 断层（红）", fontsize=9)
+    axes[3].legend(handles=[
+        plt.Line2D([], [], color=RED, lw=1.2, label="GM9 断层（真值）"),
+        plt.Line2D([], [], marker="o", ls="", color="#FFD400",
+                   ms=3, label="提取线性体"),
+    ], fontsize=6, loc="lower left", frameon=False)
     for ax in axes:
         ax.set_xlabel("经度 (°E)", fontsize=8)
         ax.tick_params(labelsize=7)
