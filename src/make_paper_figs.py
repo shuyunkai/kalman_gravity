@@ -267,10 +267,14 @@ def fault_method_figure():
     g, bathy, lon, lat = build_gm9()
     dx = float(lon[1] - lon[0]) * 111320 * np.cos(np.radians(lat.mean()))
     dy = float(lat[1] - lat[0]) * 111320
+    k = 30
     b = bandpass(g, dx, dy, 5e3, 20e3)
-    t = thg(b, dx, dy) * 1000.0
-    mask = filter_lineaments(lineament_mask(b, dx, dy, pct=70) & (bathy < 0),
-                             20, 1.8)
+    b_in = b[k:-k, k:-k]
+    t_in = thg(b_in, dx, dy) * 1000.0
+    m_in = filter_lineaments(
+        lineament_mask(b_in, dx, dy, pct=70) & (bathy[k:-k, k:-k] < 0), 20, 1.8)
+    mask = np.zeros_like(b, dtype=bool)
+    mask[k:-k, k:-k] = m_in
     lines = []
     for f in json.loads((OUT / "nz_gm9_offshore.json").read_text(encoding="utf-8"))["features"]:
         geo = f.get("geometry") or {}
@@ -282,11 +286,10 @@ def fault_method_figure():
             lines.append(a)
 
     fig, axes = plt.subplots(1, 4, figsize=(14.6, 3.7), dpi=220)
-    k = 30
     ext = [lon[k], lon[-k], lat[k], lat[-k]]
     gi = g[k:-k, k:-k]
-    bi = b[k:-k, k:-k]
-    ti = t[k:-k, k:-k]
+    bi = b_in
+    ti = t_in
     v = np.percentile(np.abs(gi), 99)
     axes[0].imshow(gi, cmap="RdBu_r", origin="lower", vmin=-v, vmax=v,
                    extent=ext, aspect="auto")
@@ -299,6 +302,8 @@ def fault_method_figure():
     axes[2].imshow(ti, cmap="inferno", origin="lower", vmin=0, vmax=vth,
                    extent=ext, aspect="auto")
     axes[2].set_title("(c) THG (mGal/km)", fontsize=10)
+    axes[2].contour(lon[k:-k], lat[k:-k], m_in, levels=[0.5],
+                    colors="cyan", linewidths=0.45)
     depth = np.where(bathy < 0, bathy, 0.0)
     rgb = LightSource(azdeg=315, altdeg=45).shade(
         depth, cmap=plt.cm.Blues_r, vmin=-5000, vmax=0, blend_mode="soft")
