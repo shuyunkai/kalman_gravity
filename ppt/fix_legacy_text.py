@@ -2,7 +2,17 @@ from pptx import Presentation
 
 P = r"D:\gravity\kalman_gravity\ppt\卡尔曼滤波重建地球重力场_含研究内容.pptx"
 prs = Presentation(P)
-s = prs.slides[16]
+
+s = None
+for sl in prs.slides:
+    for sh in sl.shapes:
+        if sh.has_text_frame and sh.text_frame.text.strip().startswith("8.3"):
+            s = sl
+            break
+    if s is not None:
+        break
+if s is None:
+    raise SystemExit("slide 8.3 not found")
 
 rules = [
     ("必须写明口径",
