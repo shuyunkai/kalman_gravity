@@ -259,29 +259,31 @@ s = new_slide("8.8", "消融对比：KF 场 vs SSV 场", "结果", [
 rows = [
     ("指标", "KF 15″ 场", "SSV 直接插值"),
     ("5 km 断层覆盖", "61.6%", "10.1%"),
-    ("5 km 命中率", "50.6%", "约 10%"),
+    ("10 km 断层覆盖", "74.1%", "36.2%"),
+    ("20 km 断层覆盖", "74.4%", "95.3%"),
     ("10–50 km RMSE", "124 m", "131 m"),
     ("10–50 km corr", "0.82", "0.77"),
     ("20–200 km RMSE", "372 m", "376 m"),
 ]
 for i, r in enumerate(rows):
-    y = 1.70 + i * 0.58
+    y = 1.68 + i * 0.50
     if i == 0:
-        rect(s, 0.42, y - 0.06, 8.2, 0.48, NAVY)
+        rect(s, 0.42, y - 0.05, 8.2, 0.44, NAVY)
     elif i % 2 == 0:
-        rect(s, 0.42, y - 0.06, 8.2, 0.48, PALE)
+        rect(s, 0.42, y - 0.05, 8.2, 0.44, PALE)
     for j, txt in enumerate(r):
-        textbox(s, 0.55 + j * 2.75, y, 2.6, 0.34,
-                [(txt, 10.5, WHITE if i == 0 else GREY, i == 0)], spacing=1.0)
+        textbox(s, 0.55 + j * 2.75, y, 2.6, 0.32,
+                [(txt, 10.0, WHITE if i == 0 else GREY, i == 0)], spacing=1.0)
 panel(s, 8.85, 1.64, 4.05, 4.45)
 textbox(s, 9.10, 1.74, 3.6, 0.30, [("结论", 12, NAVY, True)])
 bullets(s, 9.10, 2.10, 3.65, [
-    "5–50 km：KF 明显优于 SSV",
-    "20–200 km：两者相当",
-    "SSV 已约束长波，KF 补短波",
+    "5–10 km：KF 明显优于 SSV",
+    "20 km 以上：SSV 覆盖率反超",
+    "SSV 线稀疏，靠大缓冲凑覆盖",
+    "反演 5–50 km：KF 更好",
     "5–20 km 含地形先验，需注明",
-], size=9.0, gap=0.92)
-strip(s, [N("KF 增益在"), R("5–50 km"), N("；20–200 km 与 SSV 相当")])
+], size=8.6, gap=0.78)
+strip(s, [N("KF 优势在"), R("5–10 km 空间精度"), N("；远距离覆盖率不占优")])
 
 prs.save(str(OUT))
 print("saved", OUT, "pages", len(prs.slides))
