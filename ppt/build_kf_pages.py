@@ -260,9 +260,9 @@ rows = [
     ("指标", "KF 15″ 场", "SSV 直接插值"),
     ("5 km 断层覆盖", "61.6%", "10.1%"),
     ("5 km 命中率", "50.6%", "约 10%"),
-    ("20–50 km RMSE", "112 m", "113 m"),
+    ("10–50 km RMSE", "124 m", "131 m"),
+    ("10–50 km corr", "0.82", "0.77"),
     ("20–200 km RMSE", "372 m", "376 m"),
-    ("corr（20–200 km）", "0.80", "0.81"),
 ]
 for i, r in enumerate(rows):
     y = 1.70 + i * 0.58
@@ -276,12 +276,12 @@ for i, r in enumerate(rows):
 panel(s, 8.85, 1.64, 4.05, 4.45)
 textbox(s, 9.10, 1.74, 3.6, 0.30, [("结论", 12, NAVY, True)])
 bullets(s, 9.10, 2.10, 3.65, [
-    "KF 增益集中在 5–20 km 断裂",
-    "反演 20–200 km 与 SSV 相当",
+    "5–50 km：KF 明显优于 SSV",
+    "20–200 km：两者相当",
+    "SSV 已约束长波，KF 补短波",
     "5–20 km 含地形先验，需注明",
-    "因此 KF 的价值在断裂，不在反演",
 ], size=9.0, gap=0.92)
-strip(s, [N("KF 的价值在"), R("5–20 km 断裂"), N("，不在 20–200 km 反演")])
+strip(s, [N("KF 增益在"), R("5–50 km"), N("；20–200 km 与 SSV 相当")])
 
 prs.save(str(OUT))
 print("saved", OUT, "pages", len(prs.slides))
