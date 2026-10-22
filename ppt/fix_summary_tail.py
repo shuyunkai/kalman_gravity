@@ -3,8 +3,8 @@ from pptx import Presentation
 
 P = r"D:\gravity\kalman_gravity\ppt\卡尔曼滤波重建地球重力场_含研究内容.pptx"
 FIX = {
-    13: "三类观测同解；留出验证 MR22-04 3.59 mGal、JODC 4.84 mGal",
-    25: "KF 负责重建，断裂与反演共享同一套 15″ 场",
+    13: "留出验证 3.59 / 4.84 mGal；三个验证区改善 9.4–10.7%",
+    25: "KF 场 → 断裂 + 反演：5–50 km 全面优于常规数据",
 }
 
 prs = Presentation(P)
