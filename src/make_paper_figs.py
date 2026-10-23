@@ -90,13 +90,29 @@ def fault_figure():
     ls = LightSource(azdeg=315, altdeg=45)
     rgb = ls.shade(depth, cmap=plt.cm.Blues_r, vmin=-5000, vmax=0, blend_mode="soft")
     ax.imshow(rgb, origin="lower", extent=[lon[0], lon[-1], lat[0], lat[-1]], aspect="auto")
-    for arr in lines:
-        ax.plot(arr[:, 0], arr[:, 1], color=RED, lw=1.0, alpha=0.9)
+    train = [lines[i] for i in idx[:len(lines) // 2]]
+    for arr in train:
+        ax.plot(arr[:, 0], arr[:, 1], color="#9AA5B1", lw=0.8, ls="--", alpha=0.8)
+    for arr in test:
+        ax.plot(arr[:, 0], arr[:, 1], color=RED, lw=1.2)
     ys, xs = np.where(mask)
-    ax.scatter(lon[xs], lat[ys], s=0.35, c="#FFD400", alpha=0.9, linewidths=0)
-    ax.set_title("(a) 线性体与断层", fontsize=10)
+    lp = np.column_stack(_xy(lon[xs], lat[ys]))
+    fp = np.column_stack(_xy(tx, ty))
+    dist_km = cKDTree(fp).query(lp)[0] / 1000.0
+    near = dist_km <= 5.0
+    ax.scatter(lon[xs][near], lat[ys][near], s=0.7, c="#2ECC71",
+               linewidths=0, label="≤5 km")
+    ax.scatter(lon[xs][~near], lat[ys][~near], s=0.7, c="#F39C12",
+               linewidths=0, label=">5 km")
+    ax.set_title("(a) 线性体（绿≤5 km）与留出断层", fontsize=9)
     ax.set_xlabel("经度 (°E)"); ax.set_ylabel("纬度 (°N)")
     ax.tick_params(labelsize=8)
+    ax.legend(handles=[
+        plt.Line2D([], [], color=RED, lw=1.2, label="留出断层"),
+        plt.Line2D([], [], color="#9AA5B1", lw=0.8, ls="--", label="训练断层"),
+        plt.Line2D([], [], marker="o", ls="", color="#2ECC71", ms=3, label="≤5 km"),
+        plt.Line2D([], [], marker="o", ls="", color="#F39C12", ms=3, label=">5 km"),
+    ], fontsize=5.5, loc="lower left", frameon=False)
 
     # (b) coverage
     ax = ax1
@@ -107,7 +123,7 @@ def fault_figure():
     ax.annotate(f"{cov[4]:.1f}%", (5, cov[4]), xytext=(7, cov[4] - 8),
                 fontsize=9, color=RED, arrowprops=dict(arrowstyle="->", color=RED, lw=0.8))
     ax.set_xlabel("缓冲半径 (km)"); ax.set_ylabel("覆盖率 (%)")
-    ax.set_title("(b) 断层覆盖率", fontsize=10)
+    ax.set_title("(b) 留出断层覆盖率", fontsize=9)
     ax.grid(alpha=0.3); ax.tick_params(labelsize=8)
 
     # (c) rose
@@ -146,8 +162,8 @@ def fault_figure():
                 fontsize=8, color=RED,
                 arrowprops=dict(arrowstyle="->", color=RED, lw=0.8))
     ax.set_xlim(0, 30); ax.set_ylim(0, 100)
-    ax.set_xlabel("线性体到断层距离 (km)"); ax.set_ylabel("累积比例 (%)")
-    ax.set_title("(d) 距离累积分布", fontsize=10)
+    ax.set_xlabel("线性体到留出断层距离 (km)"); ax.set_ylabel("累积比例 (%)")
+    ax.set_title("(d) 距离累积分布", fontsize=9)
     ax.grid(alpha=0.3); ax.tick_params(labelsize=8)
 
     fig.tight_layout()
