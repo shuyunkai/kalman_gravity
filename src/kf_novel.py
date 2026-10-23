@@ -99,7 +99,8 @@ class BathyPriorKF:
 
     def build(self, gravity_lr, ship_15s, train_mask, lon_hr, lat_hr,
               lon_range, lat_range, upscale=4, bathy_15s=None,
-              n_iter=6, smooth_sigma=4.0):
+              n_iter=6, smooth_sigma=4.0, localize=False, adaptive=False,
+              corr_px=3.0):
         """构建 KF 重力场.
 
         参数:
@@ -144,7 +145,8 @@ class BathyPriorKF:
         r = KalmanGravityReconstructor(
             grid_shape=self.hr_shape,
             region_size_deg=self.region_size_deg,
-            lr_grid_shape=self.lr_shape)
+            lr_grid_shape=self.lr_shape,
+            localize=localize, adaptive=adaptive, corr_px=corr_px)
         r._initialized = True
         r.ny, r.nx = self.hr_shape
         r.n_state = r.ny * r.nx

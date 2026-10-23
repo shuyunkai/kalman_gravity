@@ -21,17 +21,30 @@ class KalmanGravityReconstructor:
     状态转移: 空间高斯平滑，模拟重力场连续性先验
     """
 
-    def __init__(self, grid_shape, region_size_deg, lr_grid_shape=None):
+    def __init__(self, grid_shape, region_size_deg, lr_grid_shape=None,
+                 localize=False, adaptive=False, corr_px=3.0):
         self.grid_shape = grid_shape
         self.ny, self.nx = grid_shape
         self.n_state = self.ny * self.nx
         self.region_size_deg = region_size_deg
+        self.localize = localize
+        self.adaptive = adaptive
+        self.corr_px = float(corr_px)
 
         if lr_grid_shape is None:
             self.lr_ny = max(1, int(self.ny / 4))
             self.lr_nx = max(1, int(self.nx / 4))
         else:
             self.lr_ny, self.lr_nx = lr_grid_shape
+
+        # 4x4 块内平均相关系数（用于块观测的局部化增益）
+        by = self.ny // self.lr_ny
+        bx = self.nx // self.lr_nx
+        yy, xx = np.mgrid[0:by, 0:bx]
+        dd = np.hypot(yy - (by - 1) / 2.0, xx - (bx - 1) / 2.0)
+        LL = np.exp(-0.5 * (dd / self.corr_px) ** 2)
+        m = by * bx
+        self.block_rho = float((LL.sum() - m) / max(m * (m - 1), 1))
 
         self.x = None
         self._initialized = False
@@ -108,6 +121,22 @@ class KalmanGravityReconstructor:
         lr_ny, lr_nx = self.gravity_lr.shape
         hr_per_lr_y = self.ny // lr_ny
         hr_per_lr_x = self.nx // lr_nx
+
+        if (self.localize and hr_per_lr_y * lr_ny == self.ny
+                and hr_per_lr_x * lr_nx == self.nx):
+            m = hr_per_lr_y * hr_per_lr_x
+            fac = 1.0 + (m - 1) * self.block_rho
+            X = x_2d.reshape(lr_ny, hr_per_lr_y, lr_nx, hr_per_lr_x)
+            Pb = P_2d.reshape(lr_ny, hr_per_lr_y, lr_nx, hr_per_lr_x)
+            P_bar = Pb.mean(axis=(1, 3))
+            S = P_bar * fac / m + self.R_sat_val
+            innovation = self.gravity_lr - X.mean(axis=(1, 3))
+            K = Pb * fac / m / S[:, None, :, None]
+            X += K * innovation[:, None, :, None]
+            Pb *= (1.0 - K * fac / m)
+            self.x = x_2d.ravel()
+            self.P_diag = P_2d.ravel()
+            return
 
         if hr_per_lr_y * lr_ny == self.ny and hr_per_lr_x * lr_nx == self.nx:
             # 矢量化路径: (ny, nx) -> (lr_ny, hy, lr_nx, hx)，一次算完全部块。
@@ -193,6 +222,14 @@ class KalmanGravityReconstructor:
 
         # ---- 1. 逐点标量卡尔曼更新（矢量化；观测像素互不重复，顺序无关）----
         ii, jj = np.divmod(obs_indices, self.nx)
+
+        if self.localize:
+            self._update_ship_local(obs_indices, ii, jj, x_2d, P_2d,
+                                    ship_flat, valid_mask)
+            self.x = x_2d.ravel()
+            self.P_diag = P_2d.ravel()
+            return
+
         P_ii = P_2d[ii, jj]
         K = P_ii / (P_ii + self.R_ship_val)
         innov = ship_flat[obs_indices] - x_2d[ii, jj]
@@ -246,6 +283,56 @@ class KalmanGravityReconstructor:
         self.x = x_2d.ravel()
         self.P_diag = P_2d.ravel()
 
+    def _update_ship_local(self, obs_indices, ii, jj, x_2d, P_2d,
+                           ship_flat, valid_mask):
+        """局部化船测更新：邻居增益由 P∘L 推出，替代“更新后扩散”。"""
+        R = self.R_ship_val
+        P_i = P_2d[ii, jj].copy()
+        K = P_i / (P_i + R)
+        innov = ship_flat[obs_indices] - x_2d[ii, jj]
+        x_2d[ii, jj] += K * innov
+        P_2d[ii, jj] = (1.0 - K) * P_i
+
+        r = int(np.ceil(3.0 * self.corr_px))
+        offs = np.arange(-r, r + 1)
+        dyy, dxx = np.meshgrid(offs, offs, indexing="ij")
+        L = np.exp(-0.5 * (np.hypot(dxx, dyy) / self.corr_px) ** 2)
+        L[r, r] = 0.0
+
+        n = len(obs_indices)
+        win = (2 * r + 1) ** 2
+        fi = np.empty(n * win, dtype=np.int64)
+        fc = np.empty(n * win)
+        fw = np.empty(n * win)
+        pos = 0
+        chunk = 20000
+        for s in range(0, n, chunk):
+            sl = slice(s, min(s + chunk, n))
+            ti = ii[sl, None, None] + dyy
+            tj = jj[sl, None, None] + dxx
+            inside = (ti >= 0) & (ti < self.ny) & (tj >= 0) & (tj < self.nx)
+            Pj = np.zeros(ti.shape)
+            Pj[inside] = P_2d[ti[inside], tj[inside]]
+            g = Pj * L[None] / (P_i[sl, None, None] + R)
+            c = innov[sl, None, None] * g
+            inf = L[None] * P_i[sl, None, None] / (P_i[sl, None, None] + R)
+            m = int(inside.sum())
+            fi[pos:pos + m] = ti[inside] * self.nx + tj[inside]
+            fc[pos:pos + m] = c[inside]
+            fw[pos:pos + m] = inf[inside]
+            pos += m
+
+        fi, fc, fw = fi[:pos], fc[:pos], fw[:pos]
+        big = self.ny * self.nx
+        cs = np.bincount(fi, weights=fc, minlength=big).reshape(self.ny, self.nx)
+        ws = np.bincount(fi, weights=fw, minlength=big).reshape(self.ny, self.nx)
+        cnt = np.bincount(fi, minlength=big).reshape(self.ny, self.nx)
+        mask = (cnt > 0) & ~valid_mask
+        if mask.any():
+            x_2d[mask] += cs[mask] / np.maximum(cnt[mask], 1)
+            P_2d[mask] *= np.clip(1.0 - ws[mask] / np.maximum(cnt[mask], 1),
+                                  0.1, 1.0)
+
     def smooth_backward(self, x_history, x_pred_history, P_diag_history, smooth_sigma=0.8):
         """RTS 反向平滑：利用前向滤波历史状态和协方差，获得更优估计。"""
         factor = 1.0 + smooth_sigma * 0.1
@@ -280,6 +367,30 @@ class KalmanGravityReconstructor:
         for it in range(n_iterations):
             self.predict(smooth_sigma=smooth_sigma)
             x_pred_history.append(self.x.copy())
+
+            if self.adaptive:
+                x2 = self.x.reshape(self.ny, self.nx)
+                lr = self.gravity_lr
+                by = self.ny // lr.shape[0]; bx = self.nx // lr.shape[1]
+                bm = x2.reshape(lr.shape[0], by, lr.shape[1], bx).mean(axis=(1, 3))
+                d = lr - bm
+                P2 = self.P_diag.reshape(self.ny, self.nx)
+                Pb = P2.reshape(lr.shape[0], by, lr.shape[1], bx).mean(axis=(1, 3))
+                r_emp = float(np.var(d) - np.mean(Pb))
+                self.R_sat_val = float(np.clip(
+                    0.7 * self.R_sat_val + 0.3 * max(r_emp, 1.0), 1.0, 100.0))
+                if self.gravity_ship is not None:
+                    v = (~np.isnan(self.gravity_ship)) & self.ship_train_mask
+                    if v.any():
+                        res = self.gravity_ship[v] - x2[v]
+                        r_emp = float(np.var(res) - np.mean(P2[v]))
+                        self.R_ship_val = float(np.clip(
+                            0.7 * self.R_ship_val + 0.3 * max(r_emp, 0.25),
+                            0.25, 25.0))
+                if verbose:
+                    print(f"    adaptive: R_sat={self.R_sat_val:.2f}, "
+                          f"R_ship={self.R_ship_val:.2f}")
+
             self.update_satellite()
             if self.gravity_ship is not None:
                 self.update_shipborne()
