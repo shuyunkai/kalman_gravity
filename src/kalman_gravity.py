@@ -294,7 +294,7 @@ class KalmanGravityReconstructor:
         x_2d[ii, jj] += K * innov
         P_2d[ii, jj] = (1.0 - K) * P_i
 
-        r = int(np.ceil(3.0 * self.corr_px))
+        r = min(int(np.ceil(3.0 * self.corr_px)), 40)
         offs = np.arange(-r, r + 1)
         dyy, dxx = np.meshgrid(offs, offs, indexing="ij")
         L = np.exp(-0.5 * (np.hypot(dxx, dyy) / self.corr_px) ** 2)
@@ -302,11 +302,11 @@ class KalmanGravityReconstructor:
 
         n = len(obs_indices)
         win = (2 * r + 1) ** 2
-        fi = np.empty(n * win, dtype=np.int64)
-        fc = np.empty(n * win)
-        fw = np.empty(n * win)
-        pos = 0
-        chunk = 20000
+        big = self.ny * self.nx
+        cs = np.zeros(big)
+        ws = np.zeros(big)
+        cnt = np.zeros(big)
+        chunk = max(1, min(20000, int(2.0e7 / win)))
         for s in range(0, n, chunk):
             sl = slice(s, min(s + chunk, n))
             ti = ii[sl, None, None] + dyy
@@ -317,17 +317,14 @@ class KalmanGravityReconstructor:
             g = Pj * L[None] / (P_i[sl, None, None] + R)
             c = innov[sl, None, None] * g
             inf = L[None] * P_i[sl, None, None] / (P_i[sl, None, None] + R)
-            m = int(inside.sum())
-            fi[pos:pos + m] = ti[inside] * self.nx + tj[inside]
-            fc[pos:pos + m] = c[inside]
-            fw[pos:pos + m] = inf[inside]
-            pos += m
+            idx = ti[inside] * self.nx + tj[inside]
+            cs += np.bincount(idx, weights=c[inside], minlength=big)
+            ws += np.bincount(idx, weights=inf[inside], minlength=big)
+            cnt += np.bincount(idx, minlength=big)
 
-        fi, fc, fw = fi[:pos], fc[:pos], fw[:pos]
-        big = self.ny * self.nx
-        cs = np.bincount(fi, weights=fc, minlength=big).reshape(self.ny, self.nx)
-        ws = np.bincount(fi, weights=fw, minlength=big).reshape(self.ny, self.nx)
-        cnt = np.bincount(fi, minlength=big).reshape(self.ny, self.nx)
+        cs = cs.reshape(self.ny, self.nx)
+        ws = ws.reshape(self.ny, self.nx)
+        cnt = cnt.reshape(self.ny, self.nx)
         mask = (cnt > 0) & ~valid_mask
         if mask.any():
             x_2d[mask] += cs[mask] / np.maximum(cnt[mask], 1)
