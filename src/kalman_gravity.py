@@ -22,7 +22,7 @@ class KalmanGravityReconstructor:
     """
 
     def __init__(self, grid_shape, region_size_deg, lr_grid_shape=None,
-                 localize=False, adaptive=False, corr_px=3.0):
+                 localize=False, adaptive=False, corr_px=3.0, adaptive_ship=True):
         self.grid_shape = grid_shape
         self.ny, self.nx = grid_shape
         self.n_state = self.ny * self.nx
@@ -30,6 +30,7 @@ class KalmanGravityReconstructor:
         self.localize = localize
         self.adaptive = adaptive
         self.corr_px = float(corr_px)
+        self.adaptive_ship = adaptive_ship
 
         if lr_grid_shape is None:
             self.lr_ny = max(1, int(self.ny / 4))
@@ -379,7 +380,7 @@ class KalmanGravityReconstructor:
                 r_emp = float(np.var(d) - np.mean(Pb))
                 self.R_sat_val = float(np.clip(
                     0.7 * self.R_sat_val + 0.3 * max(r_emp, 1.0), 1.0, 100.0))
-                if self.gravity_ship is not None:
+                if self.adaptive_ship and self.gravity_ship is not None:
                     v = (~np.isnan(self.gravity_ship)) & self.ship_train_mask
                     if v.any():
                         res = self.gravity_ship[v] - x2[v]

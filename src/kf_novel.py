@@ -63,15 +63,18 @@ class BathyPriorKF:
 
     def __init__(self, hr_grid_shape, lr_grid_shape, region_size_deg,
                  process_noise_std=2.0, sat_noise_std=3.0, ship_noise_std=1.0,
-                 alpha=1.0, bathy_cutoff_deg=0.05):
+                 alpha=1.0, bathy_cutoff_deg=0.05,
+                 p0_std=None, q_std=None, adaptive_ship=True):
         self.hr_shape = hr_grid_shape
         self.lr_shape = lr_grid_shape
         self.region_size_deg = region_size_deg
-        self.Q = process_noise_std ** 2
+        self.P0 = (p0_std if p0_std is not None else process_noise_std) ** 2
+        self.Q = (q_std if q_std is not None else process_noise_std) ** 2
         self.R_sat = sat_noise_std ** 2
         self.R_ship = ship_noise_std ** 2
         self.alpha = alpha
         self.bathy_cutoff_deg = bathy_cutoff_deg
+        self.adaptive_ship = adaptive_ship
 
     def _bathy_to_bouguer(self, bathy_15s, lon_hr, lat_hr):
         """GEBCO 高程 → 地形起伏引起的重力效应 (一阶布格平板近似, 单位 mGal)。
@@ -146,12 +149,13 @@ class BathyPriorKF:
             grid_shape=self.hr_shape,
             region_size_deg=self.region_size_deg,
             lr_grid_shape=self.lr_shape,
-            localize=localize, adaptive=adaptive, corr_px=corr_px)
+            localize=localize, adaptive=adaptive, corr_px=corr_px,
+            adaptive_ship=self.adaptive_ship)
         r._initialized = True
         r.ny, r.nx = self.hr_shape
         r.n_state = r.ny * r.nx
         r.x = prior.ravel().copy()
-        r.P_diag = self.Q * np.ones(r.n_state)
+        r.P_diag = self.P0 * np.ones(r.n_state)
         r.Q_diag = self.Q * np.ones(r.n_state)
         r.R_sat_val = self.R_sat
         r.R_ship_val = self.R_ship
