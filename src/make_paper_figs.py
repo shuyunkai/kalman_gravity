@@ -10,6 +10,7 @@ import numpy as np
 from matplotlib.colors import LightSource
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 from scipy.interpolate import RegularGridInterpolator
+from scipy.ndimage import distance_transform_edt
 from scipy.spatial import cKDTree
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -310,14 +311,37 @@ def fault_method_figure():
     axes[3].imshow(rgb[k:-k, k:-k], origin="lower", extent=ext, aspect="auto")
     for arr in lines:
         axes[3].plot(arr[:, 0], arr[:, 1], color=RED, lw=1.2)
+    tx, ty = densify(lines, 0.5)
+    lat0 = float(lat.mean())
+    fx = (tx - lon[0]) * 111320 * np.cos(np.radians(lat0))
+    fy = (ty - lat[0]) * 111320
     ys, xs = np.where(mask)
-    axes[3].scatter(lon[xs], lat[ys], s=1.6, c="#FFD400", linewidths=0)
+    px = (lon[xs] - lon[0]) * 111320 * np.cos(np.radians(lat0))
+    py = (lat[ys] - lat[0]) * 111320
+    dist_km = cKDTree(np.c_[fx, fy]).query(np.c_[px, py])[0] / 1000.0
+    near = dist_km <= 5.0
+    axes[3].scatter(lon[xs][near], lat[ys][near], s=2.4, c="#2ECC71",
+                    linewidths=0, label="≤5 km")
+    axes[3].scatter(lon[xs][~near], lat[ys][~near], s=2.4, c="#F39C12",
+                    linewidths=0, label=">5 km")
+    ny, nx = mask.shape
+    fmask = np.zeros((ny, nx), dtype=bool)
+    ix = np.clip(((tx - lon[0]) / (lon[-1] - lon[0]) * (nx - 1)).astype(int),
+                 0, nx - 1)
+    iy = np.clip(((ty - lat[0]) / (lat[-1] - lat[0]) * (ny - 1)).astype(int),
+                 0, ny - 1)
+    fmask[iy, ix] = True
+    dgrid = distance_transform_edt(~fmask, sampling=(dy, dx)) / 1000.0
+    axes[3].contour(lon, lat, dgrid, levels=[5], colors="#C0392B",
+                    linewidths=0.5, linestyles="--")
     axes[3].set_xlim(ext[0], ext[1]); axes[3].set_ylim(ext[2], ext[3])
-    axes[3].set_title("(d) 提取线性体（黄）与 GM9 断层（红）", fontsize=9)
+    axes[3].set_title("(d) 线性体（绿≤5 km，橙>5 km）与 GM9 断层", fontsize=8.5)
     axes[3].legend(handles=[
-        plt.Line2D([], [], color=RED, lw=1.2, label="GM9 断层（真值）"),
-        plt.Line2D([], [], marker="o", ls="", color="#FFD400",
-                   ms=3, label="提取线性体"),
+        plt.Line2D([], [], color=RED, lw=1.2, label="GM9 断层"),
+        plt.Line2D([], [], marker="o", ls="", color="#2ECC71",
+                   ms=3, label="≤5 km"),
+        plt.Line2D([], [], marker="o", ls="", color="#F39C12",
+                   ms=3, label=">5 km"),
     ], fontsize=6, loc="lower left", frameon=False)
     for ax in axes:
         ax.set_xlabel("经度 (°E)", fontsize=8)
