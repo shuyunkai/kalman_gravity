@@ -52,18 +52,18 @@ def add_page(title, body, fig, page):
     r.font.size = Pt(17); r.font.color.rgb = PALE
     r.font.name = "Microsoft YaHei"
 
-    # 页码（正文一样 17pt）
-    tb = s.shapes.add_textbox(Inches(11.9), Inches(2.52),
-                              Inches(0.8), Inches(0.3))
+    # 页码：最下方小字
+    tb = s.shapes.add_textbox(Inches(11.9), Inches(7.30),
+                              Inches(0.8), Inches(0.18))
     tf = tb.text_frame; tf.margin_top = 0; tf.margin_bottom = 0
     p = tf.paragraphs[0]; p.alignment = PP_ALIGN.RIGHT
     r = p.add_run(); r.text = f"{page} / 13"
-    r.font.size = Pt(17); r.font.color.rgb = PALE
+    r.font.size = Pt(8); r.font.color.rgb = RGBColor(0x5B, 0x65, 0x73)
     r.font.name = "Microsoft YaHei"
 
     # 图片自适应
     iw, ih = Image.open(fig).size
-    max_w, max_h = 11.7, 4.1
+    max_w, max_h = 11.7, 4.03
     w = max_w; h = w * ih / iw
     if h > max_h:
         h = max_h; w = h * iw / ih
@@ -108,7 +108,7 @@ pages = [
     ("本项目 KF 流程",
      "卫星 1′、船测与地形先验进入同一套 15″ 状态，经块观测、空间相关协方差与自适应噪声"
      "迭代 6 轮，再做 RTS 平滑，输出重力场与逐像元方差。",
-     OLD / "fig_paper_method_flow.png"),
+     NEW / "fig_new_flow_fault.png"),
     ("验证",
      "三个有船测的 15″ 区域用整条留出航次验证：南海-琉球 5.34→4.91，菲律宾海 1.49→1.48，"
      "日本综合区 3.96→3.83（mGal）；本项目 KF 在南海与日本略优，菲律宾海标准 KF 更好。",
@@ -118,8 +118,8 @@ pages = [
      "留出船测精度 3.59/4.84 mGal，说明 15″ 场在部分区域有稳定增益。",
      NEW / "fig_new_accuracy.png"),
     ("断层",
-     "在 15″ 场上做 5–20 km 带通与 THG，提取线性体并与 GM9 断层对比；5 km 覆盖 61.6%，"
-     "中位距 3.7 km。该结果是重力—地形联合产品，不是纯重力断裂识别。",
+     "在 15″ 场上做 5–20 km 带通与 THG，提取线性体并与 GM9 断层对比；断层对短波脊线敏感，"
+     "采用未局部化的 15″ 场，5 km 覆盖 61.6%，中位距 3.7 km。该结果是重力—地形联合产品。",
      OLD / "fig_paper_fault_validation.png"),
     ("总结",
      "空间相关自适应卡尔曼滤波把 15″ 重力场重建为 1.85 km 网格，三区改善 0.3%–8.1%，"
