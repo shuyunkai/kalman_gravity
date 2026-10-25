@@ -356,7 +356,7 @@ def fig_summary():
     ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
     cards = [("15″", "分辨率", "1.85 km 网格"),
              ("0.3–8.1%", "精度改善", "相对 1′ 产品"),
-             ("61.6%", "断裂覆盖", "5 km，GM9")]
+             ("67.9%", "断裂覆盖", "5 km，GM9")]
     for i, (big, mid, small) in enumerate(cards):
         x = 0.02 + i * 0.335
         ax.add_patch(FancyBboxPatch((x, 0.12), 0.29, 0.72,
