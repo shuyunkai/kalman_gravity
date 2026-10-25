@@ -19,7 +19,8 @@ from fault_validation import densify, fault_match
 LON, LAT = (170.3, 172.1), (-46.4, -45.0)
 
 
-def build(g_lr, bathy, lon, lat, w_keep=0.7, p0=2.0, n_iter=6, ship=None, train=None):
+def build(g_lr, bathy, lon, lat, w_keep=0.7, p0=2.0, n_iter=6,
+          ship=None, train=None, return_reconstructor=False):
     ny, nx = bathy.shape
     up = 4
     kf = BathyPriorKF((ny, nx), g_lr.shape, (1.4, 1.8), process_noise_std=p0,
@@ -61,7 +62,9 @@ def build(g_lr, bathy, lon, lat, w_keep=0.7, p0=2.0, n_iter=6, ship=None, train=
 
     import types
     r.predict = types.MethodType(predict, r)
-    return r.run(n_iterations=n_iter, smooth_sigma=4.0, verbose=False)
+    r.prior_2d = prior.copy()
+    g = r.run(n_iterations=n_iter, smooth_sigma=4.0, verbose=False)
+    return r if return_reconstructor else g
 
 
 def main():

@@ -401,6 +401,8 @@ class KalmanGravityReconstructor:
                 print(f"  迭代 {it+1}/{n_iterations}: mean={x_2d.mean():.2f}, std={x_2d.std():.2f}, "
                       f"range=[{x_2d.min():.1f}, {x_2d.max():.1f}]")
 
+        self.x_history = [h.reshape(self.ny, self.nx).copy() for h in x_history]
+        self.p_history = [h.reshape(self.ny, self.nx).copy() for h in p_history]
         x_final, P_smooth = self.smooth_backward(x_history, x_pred_history, p_history, smooth_sigma=smooth_sigma)
         self._P_final = P_smooth.reshape(self.ny, self.nx)
         return x_final.reshape(self.ny, self.nx)
