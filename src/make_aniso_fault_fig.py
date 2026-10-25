@@ -60,7 +60,7 @@ def main():
     v = np.percentile(np.abs(g[k:-k, k:-k]), 99)
     axes[0].imshow(g[k:-k, k:-k], cmap="RdBu_r", origin="lower", vmin=-v, vmax=v,
                    extent=ext, aspect="auto")
-    axes[0].set_title("(a) 各向异性 KF 15″ 场", fontsize=9)
+    axes[0].set_title("(a) 结构引导 KF 15″ 场", fontsize=9)
     v = np.percentile(np.abs(b[k:-k, k:-k]), 99)
     axes[1].imshow(b[k:-k, k:-k], cmap="RdBu_r", origin="lower", vmin=-v, vmax=v,
                    extent=ext, aspect="auto")
