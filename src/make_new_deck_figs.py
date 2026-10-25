@@ -272,9 +272,9 @@ def fig_projectkf():
     ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
     items = [
         (0.03, "块观测", "H 取 1′ 块平均\n匹配卫星足迹"),
-        (0.28, "空间相关", "P∘L 修正协方差\n相关长度 ≈13 km"),
-        (0.53, "自适应", "新息估计 R_sat\n适应不同海域"),
-        (0.78, "融合", "15″ 场 + 不确定度\nP 逐像元输出"),
+        (0.28, "相干预测", "结构张量 C\n脊线处少平滑"),
+        (0.53, "稳定更新", "对角 P + RTS\n压制非相干噪声"),
+        (0.78, "融合", "15″ 场 + 方差\n逐像元输出"),
     ]
     for x, name, txt in items:
         ax.add_patch(FancyBboxPatch((x, 0.30), 0.19, 0.46,
@@ -286,10 +286,10 @@ def fig_projectkf():
     for x in (0.22, 0.47, 0.72):
         ax.annotate("", xy=(x + 0.06, 0.53), xytext=(x, 0.53),
                     arrowprops=dict(arrowstyle="-|>", color=RED))
-    ax.text(0.5, 0.88, "空间相关自适应卡尔曼滤波", ha="center",
+    ax.text(0.5, 0.88, "相干保持卡尔曼滤波", ha="center",
             fontsize=13, color=NAVY, fontweight="bold")
     ax.text(0.5, 0.16,
-            "$K=(P\\circ L)H^{T}[H(P\\circ L)H^{T}+R]^{-1}$",
+            "$x^{-}=(1-wC^{2})G_{\\sigma}x+wC^{2}x$",
             ha="center", fontsize=12, color=RED)
     save(fig, "fig_new_projectkf.png")
 
