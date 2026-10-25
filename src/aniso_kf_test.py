@@ -19,7 +19,7 @@ from fault_validation import densify, fault_match
 LON, LAT = (170.3, 172.1), (-46.4, -45.0)
 
 
-def build(g_lr, bathy, lon, lat, w_keep=0.7, p0=2.0, n_iter=6):
+def build(g_lr, bathy, lon, lat, w_keep=0.7, p0=2.0, n_iter=6, ship=None, train=None):
     ny, nx = bathy.shape
     up = 4
     kf = BathyPriorKF((ny, nx), g_lr.shape, (1.4, 1.8), process_noise_std=p0,
@@ -46,8 +46,8 @@ def build(g_lr, bathy, lon, lat, w_keep=0.7, p0=2.0, n_iter=6):
     r.R_sat_val = 9.0
     r.R_ship_val = 1.0
     r.gravity_lr = g_lr
-    r.gravity_ship = np.full((ny, nx), np.nan)
-    r.ship_train_mask = np.zeros((ny, nx), dtype=bool)
+    r.gravity_ship = np.full((ny, nx), np.nan) if ship is None else ship
+    r.ship_train_mask = np.zeros((ny, nx), dtype=bool) if train is None else train
 
     def predict(self, smooth_sigma=4.0):
         x2 = self.x.reshape(self.ny, self.nx)
