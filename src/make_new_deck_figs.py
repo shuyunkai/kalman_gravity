@@ -132,7 +132,7 @@ def fig_products():
 
     ax = axes[1]
     regions = ["南海-琉球", "菲律宾海", "日本综合区"]
-    ssv = [5.344, 1.485, 3.960]; kf = [4.910, 1.480, 3.830]
+    ssv = [5.344, 1.485, 3.960]; kf = [4.881, 1.483, 3.710]
     x = np.arange(3); w = 0.35
     ax.bar(x - w/2, ssv, w, color=PALE, label="1′ 产品")
     ax.bar(x + w/2, kf, w, color=NAVY, label="15″ 重建")
@@ -299,17 +299,17 @@ def fig_validation():
     regions = ["南海-琉球", "菲律宾海", "日本综合区"]
     ssv = [5.344, 1.485, 3.960]
     kf = [4.951, 1.480, 3.883]
-    bla = [4.910, 1.547, 3.830]
+    ckf = [4.881, 1.483, 3.710]
     x = np.arange(3); w = 0.26
     fig, ax = plt.subplots(figsize=(12.8, 4.0), dpi=220)
     ax.bar(x - w, ssv, w, color=PALE, label="1′ 产品")
     ax.bar(x, kf, w, color=MID, label="标准 KF")
-    ax.bar(x + w, bla, w, color=NAVY, label="本项目 KF")
-    ann = ["最佳 ↓8.1%", "KF ↓0.3%", "最佳 ↓3.3%"]
+    ax.bar(x + w, ckf, w, color=NAVY, label="相干保持 KF")
+    ann = ["CKF ↓8.7%", "KF ↓0.3%", "CKF ↓6.3%"]
     for i in range(3):
-        for j, val in enumerate((ssv[i], kf[i], bla[i])):
+        for j, val in enumerate((ssv[i], kf[i], ckf[i])):
             ax.text(x[i] + (j-1)*w, val + 0.05, f"{val:.2f}", ha="center", fontsize=7)
-        ax.text(x[i], max(ssv[i], kf[i], bla[i]) + 0.45,
+        ax.text(x[i], max(ssv[i], kf[i], ckf[i]) + 0.45,
                 ann[i], ha="center", fontsize=9,
                 color=RED, fontweight="bold")
     ax.set_xticks(x); ax.set_xticklabels(regions)
@@ -323,7 +323,7 @@ def fig_validation():
 # 11. 精度总结
 def fig_accuracy():
     labels = ["南海-琉球", "菲律宾海", "日本综合区"]
-    sat = [8.1, 0.3, 3.3]
+    sat = [8.7, 0.2, 6.3]
     x = np.arange(3); w = 0.45
     fig, axes = plt.subplots(1, 2, figsize=(13.2, 3.9), dpi=220,
                              gridspec_kw={"width_ratios": [1.2, 1]})
@@ -337,7 +337,7 @@ def fig_accuracy():
     ax.set_title("(a) 三个新增验证区的改善幅度", fontsize=10)
     ax.grid(axis="y", alpha=0.25)
     ax = axes[1]; ax.axis("off")
-    cards = [("0.3–8.1%", "相对 1′ 产品"), ("3.59 / 4.84", "留出船测 mGal")]
+    cards = [("0.2–8.7%", "相对 1′ 产品"), ("3.59 / 4.84", "留出船测 mGal")]
     for i, (val, txt) in enumerate(cards):
         y = 0.72 - i * 0.31
         ax.add_patch(FancyBboxPatch((0.05, y), 0.9, 0.24,
@@ -355,7 +355,7 @@ def fig_summary():
     fig, ax = plt.subplots(figsize=(12.8, 3.6), dpi=220)
     ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
     cards = [("15″", "分辨率", "1.85 km 网格"),
-             ("0.3–8.1%", "精度改善", "相对 1′ 产品"),
+             ("0.2–8.7%", "精度改善", "相对 1′ 产品"),
              ("67.9%", "断裂覆盖", "5 km，GM9")]
     for i, (big, mid, small) in enumerate(cards):
         x = 0.02 + i * 0.335
