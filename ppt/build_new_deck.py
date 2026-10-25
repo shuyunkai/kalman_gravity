@@ -26,11 +26,11 @@ def add_page(title, body, fig, page):
 
     from pptx.enum.shapes import MSO_SHAPE
     rect = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0,
-                              prs.slide_width, Inches(2.95))
+                              prs.slide_width, Inches(2.30))
     rect.fill.solid(); rect.fill.fore_color.rgb = NAVY
     rect.line.fill.background()
 
-    tb = s.shapes.add_textbox(Inches(0.7), Inches(0.42),
+    tb = s.shapes.add_textbox(Inches(0.7), Inches(0.28),
                               Inches(11.9), Inches(0.55))
     tf = tb.text_frame; tf.word_wrap = True
     tf.margin_left = 0; tf.margin_right = 0
@@ -40,7 +40,7 @@ def add_page(title, body, fig, page):
     r.font.size = Pt(28); r.font.bold = True
     r.font.color.rgb = WHITE; r.font.name = "Microsoft YaHei"
 
-    tb = s.shapes.add_textbox(Inches(0.7), Inches(1.22),
+    tb = s.shapes.add_textbox(Inches(0.7), Inches(0.88),
                               Inches(11.9), Inches(1.5))
     tf = tb.text_frame; tf.word_wrap = True
     tf.margin_left = 0; tf.margin_right = 0
@@ -63,12 +63,12 @@ def add_page(title, body, fig, page):
 
     # 图片自适应
     iw, ih = Image.open(fig).size
-    max_w, max_h = 11.7, 4.03
+    max_w, max_h = 12.4, 4.78
     w = max_w; h = w * ih / iw
     if h > max_h:
         h = max_h; w = h * iw / ih
     x = (13.333 - w) / 2
-    s.shapes.add_picture(str(fig), Inches(x), Inches(3.16),
+    s.shapes.add_picture(str(fig), Inches(x), Inches(2.42),
                          width=Inches(w))
 
 
@@ -84,7 +84,7 @@ pages = [
     ("现有的 1′ 地球重力场产品",
      "SSV33.1、DTU21GRA、SDUST2022GRA、NSOAS24 等产品分辨率多为 1′；在三个验证区，"
      "15″ 重建相对 1′ 产品的 RMSE 改善 0.2%–8.7%。",
-     NEW / "fig_new_products.png"),
+     NEW / "fig_new_products_rich.png"),
     ("常用的 15″ 重力场重建方法",
      "常用方法包括插值、频域融合、深度学习与卡尔曼滤波；它们依赖插值核、波长先验、"
      "训练样本或协方差模型，目标是恢复 15″、5–20 km 的可信结构。",
@@ -92,7 +92,7 @@ pages = [
     ("这些方法存在的缺点",
      "插值会平滑短波，频域融合依赖先验且受边界影响，深度学习缺物理约束与样本，"
      "标准 KF 则受协方差建模限制；1′ 产品在 20 km 以下的能量明显缺失。",
-     NEW / "fig_new_cons.png"),
+     NEW / "fig_new_cons_rich.png"),
     ("标准 KF 可以解决上述问题",
      "标准卡尔曼滤波把重力场写成状态，把卫星、船测写成观测，通过预测—增益—更新递推；"
      "权重由 R/Q 自动决定，并能给出逐像元不确定度，适合多源融合。",
