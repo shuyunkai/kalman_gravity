@@ -41,18 +41,23 @@ ax.text(0.5, -0.22, "$H_i(k)=1-wc_i^2(1-e^{-k^2\\sigma^2/2})$",
         transform=ax.transAxes, ha="center", fontsize=10, color=RED)
 
 ax = axes[2]; ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
-ax.text(0.5, 0.94, "(c) 改在哪、解决什么", ha="center", fontsize=12,
+ax.text(0.5, 0.96, "(c) 公式与频响的含义", ha="center", fontsize=12,
         color=NAVY, fontweight="bold")
-rows = [
-    ("原式", "$x^-=G_\\sigma x$"),
-    ("改后", "$x^-=G_\\sigma x+wC^2(x-G_\\sigma x)$"),
-    ("$c=1$", "$A\\approx I$：脊线不平滑"),
-    ("$c=0$", "$A\\approx G_\\sigma$：平坦区照常平滑"),
-    ("5–20 km", "$H_i$ 由 $e^{-k^2\\sigma^2/2}$ 提高到 1"),
+lines = [
+    "标准 KF：$A=G_\\sigma$",
+    "5–20 km 的 $H(k)$ 只有 0.04–0.45，",
+    "短波被压低，脊线变钝。",
+    "",
+    "相干保持：$A=(1-wC^2)G_\\sigma+wC^2$",
+    "等价于 $x^-=G_\\sigma x+wC^2(x-G_\\sigma x)$，",
+    "即在平滑场上加回 $wC^2(x-G_\\sigma x)$。",
+    "",
+    "$c=1$：$A\\approx I$，$H_i\\approx1$；",
+    "$c=0$：退化为 $G_\\sigma$，照常平滑。",
+    "所以 5–20 km 的 $H_i$ 提高，平坦区仍平滑。",
 ]
-for i, (a, b) in enumerate(rows):
-    y = 0.78 - i*0.16
-    ax.text(0.03, y, a, fontsize=11, color=RED, fontweight="bold", va="center")
-    ax.text(0.22, y, b, fontsize=10.5, color="#1A1A1A", va="center")
+for i, line in enumerate(lines):
+    ax.text(0.03, 0.84 - i*0.078, line, fontsize=10, color="#1A1A1A",
+            va="center")
 fig.savefig(f"{ROOT}/fig_new_contribution_formula.png", bbox_inches="tight")
 print("saved")
