@@ -69,7 +69,7 @@ def applications():
     panels = [
         ("(a) 导航：短波梯度", grad, "Reds", None),
         ("(b) 地形/工程：5–20 km", g5, "RdBu_r", "sym"),
-        ("(c) 资源/深部：布格与长波", boug, "RdBu_r", "sym"),
+        ("(c) 资源：布格异常", boug, "RdBu_r", "sym"),
     ]
     for ax, (title, fld, cmap, mode) in zip(
             [fig.add_subplot(gs[1, i]) for i in range(3)], panels):

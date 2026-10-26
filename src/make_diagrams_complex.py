@@ -27,7 +27,7 @@ def concept():
     im = ax.imshow(gv, cmap="RdBu_r", origin="upper",
                    extent=[glon[0], glon[-1], glat[-1], glat[0]],
                    vmin=-100, vmax=100, aspect="auto")
-    ax.set_title("(a) 全球自由空气重力异常（1′）", fontsize=11)
+    ax.set_title("(a) 全球自由空气重力异常（EGM2008）", fontsize=11)
     ax.set_xlabel("经度 (°E)", fontsize=8); ax.set_ylabel("纬度 (°N)", fontsize=8)
     ax.tick_params(labelsize=7)
     fig.colorbar(im, ax=ax, fraction=0.04, pad=0.02).set_label("mGal", fontsize=7)

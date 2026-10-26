@@ -73,8 +73,9 @@ def cons():
     fig, axes = plt.subplots(2, 2, figsize=(13.4, 5.2), dpi=220)
     ax = axes[0, 0]
     i = np.argmin(np.abs(lat - 36.0))
-    ax.step(lon, ssv[i], where="mid", color=NAVY, lw=1.4, label="1′ 产品")
-    ax.plot(lon, ssv[i], color=RED, lw=0.9, ls="--", label="插值")
+    xs = lon[::4]; ys = ssv[i, ::4]
+    ax.step(xs, ys, where="mid", color=NAVY, lw=1.4, label="1′ 格点")
+    ax.plot(xs, ys, color=RED, lw=1.0, ls="--", label="插值")
     ax.set_xlim(141, 149)
     ax.set_title("(a) 插值：只加密，不增短波", fontsize=11)
     ax.set_xlabel("经度 (°E)", fontsize=8); ax.set_ylabel("mGal", fontsize=8)
