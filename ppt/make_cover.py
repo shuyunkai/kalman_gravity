@@ -56,14 +56,6 @@ for sh in s.shapes:
     elif "汇报人" in t:
         replace(sh, ["汇报人：____________", "", "时    间：2026 年 10 月"], WHITE, size=22)
 
-# 副标题
-tb = s.shapes.add_textbox(Inches(3.0), Inches(4.05), Inches(8.2), Inches(0.5))
-tf = tb.text_frame; tf.word_wrap = True
-p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER
-r = p.add_run(); r.text = "——船测—卫星重力融合与断裂应用"
-r.font.size = Pt(20); r.font.name = "Microsoft YaHei"
-r.font.color.rgb = GOLD
-
 prs.save(OUT)
 TMP.unlink(missing_ok=True)
 print("saved", OUT)
