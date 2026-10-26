@@ -42,11 +42,14 @@ def main():
     ax.set_title("(b) 1′ 块平均 ≠ 点观测", fontsize=11)
 
     ax = axes[1, 0]
-    diff = ckf - ssv
-    vd = np.nanpercentile(np.abs(diff[sub]), 98)
-    im = ax.imshow(diff[sub], cmap="PuOr_r", origin="lower", vmin=-vd, vmax=vd,
+    ny, nx = ssv.shape
+    blk = ssv.reshape(ny//4, 4, nx//4, 4).mean(axis=(1, 3))
+    up = np.repeat(np.repeat(blk, 4, axis=0), 4, axis=1)
+    res = ssv - up
+    vd = np.nanpercentile(np.abs(res[sub]), 98)
+    im = ax.imshow(res[sub], cmap="PuOr_r", origin="lower", vmin=-vd, vmax=vd,
                    extent=ext, aspect="auto")
-    ax.set_title("(c) 船测条带 / 块边界", fontsize=11)
+    ax.set_title("(c) 块平均：块边界台阶", fontsize=11)
     ax.set_xlabel("经度 (°E)", fontsize=9); ax.set_ylabel("纬度 (°N)", fontsize=9)
     ax.tick_params(labelsize=8)
     cb = fig.colorbar(im, ax=ax, fraction=0.04, pad=0.02)
