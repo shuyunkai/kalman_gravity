@@ -9,8 +9,8 @@ from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.util import Inches, Pt
 
 ROOT = Path(__file__).parent.parent
-PPT_SRC = ROOT / "ppt" / "_石大空白_13页.pptx"
-PPT_OUT = ROOT / "ppt" / "汇报_石大模板_13页.pptx"
+PPT_SRC = ROOT / "ppt" / "_石大空白_14页.pptx"
+PPT_OUT = ROOT / "ppt" / "汇报_石大模板_14页.pptx"
 NEW = ROOT / "output_real" / "three_parts" / "newdeck"
 
 GOLD = RGBColor(0xC9, 0xA2, 0x27)
@@ -50,6 +50,11 @@ PAGES = [
      "直接套用会遇到三个问题：对角 P 假设格点独立、1′ 块平均被当成点观测、船测更新后出现条带；"
      "单点更新只改一个像素，邻域没有一起修正，所以标准 KF 不能直接拿来重建 15″ 场。",
      NEW / "fig_new_stdkf_problems_2x2.png"),
+    ("本项目提出的相干保持 KF",
+     "本项目提出相干保持卡尔曼滤波：在标准 KF 的预测步引入结构张量相干 C，"
+     "用 x⁻=(1−wC²)Gσx+wC²x 让脊线处少平滑、平坦区正常平滑。"
+     "它主要解决标准 KF 把 5–20 km 相干短波磨平的问题，在不牺牲重力 RMSE 的前提下保住断裂与地形结构。",
+     NEW / "fig_new_contribution.png"),
     ("本项目 KF 重建过程",
      "以 1′ 和船测为输入，先验加入地形高频，经 6 轮块观测更新，修正量集中在测线与构造带；"
      "这样做的原因是让修正沿构造扩散，而不是全局重算，从而在保住长波的同时补出短波。",
@@ -84,6 +89,7 @@ HIGHLIGHTS = [
     ["只平滑", "边界振铃", "协方差函数", "块边界", "5–20 km"],
     ["状态", "观测", "预测—增益—更新", "逐像元方差"],
     ["对角 P", "块平均", "条带", "单点更新"],
+    ["相干保持卡尔曼滤波", "结构张量相干 C", "5–20 km", "不牺牲重力 RMSE"],
     ["地形高频", "6 轮", "测线与构造带", "沿构造扩散"],
     ["1′ 观测", "地形高频", "6 轮", "RTS", "逐像元方差"],
     ["整条航次留出", "未知测线"],
@@ -92,7 +98,7 @@ HIGHLIGHTS = [
     ["0.2–8.7%", "67.9%", "相干性"],
 ]
 
-NUMS = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三"]
+NUMS = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四"]
 
 
 def clear(slide):
@@ -168,7 +174,7 @@ for i, (title, body, fig) in enumerate(PAGES):
     y = 2.40 + (max_h - h) / 2
     s.shapes.add_picture(str(fig), Inches(x), Inches(y), width=Inches(w))
 
-    add_text(s, 12.05, 7.10, 1.0, 0.28, f"{i+1} / 13", 9,
+    add_text(s, 12.05, 7.10, 1.0, 0.28, f"{i+1} / 14", 9,
              RGBColor(0xD9, 0xC8, 0x9A), bold=False, align=PP_ALIGN.RIGHT)
 
 prs.save(PPT_OUT)
