@@ -14,7 +14,7 @@ fig = plt.figure(figsize=(13.4, 5.4), dpi=220)
 gs = fig.add_gridspec(2, 3, height_ratios=[1.0, 1.65], hspace=0.42, wspace=0.32)
 
 cards = [("15″", "分辨率", "1.85 km 网格"),
-         ("0.2–8.7%", "三区精度改善", "相对 1′ 产品"),
+         ("1.4–4.4%", "精度改善（南海/日本）", "相对标准 KF"),
          ("67.9%", "5 km 断裂覆盖", "命中 44.5%")]
 for i, (val, name, sub) in enumerate(cards):
     ax = fig.add_subplot(gs[0, i]); ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
@@ -27,12 +27,12 @@ for i, (val, name, sub) in enumerate(cards):
 
 ax = fig.add_subplot(gs[1, 0])
 names = ["南海-琉球", "菲律宾海", "日本"]
-vals = [8.7, 0.2, 6.3]
-ax.barh(names, vals, color=[NAVY, "#90A4AE", NAVY], height=0.55)
+vals = [1.4, -0.2, 4.4]
+ax.barh(names, vals, color=[NAVY, RED, NAVY], height=0.55)
 for i, v in enumerate(vals):
-    ax.text(v+0.2, i, f"{v}%", va="center", fontsize=8)
-ax.set_xlim(0, 10); ax.set_xlabel("RMSE 改善 (%)", fontsize=8)
-ax.set_title("(a) 三区精度改善", fontsize=10)
+    ax.text(v + (0.15 if v >= 0 else -0.55), i, f"{v}%", va="center", fontsize=8)
+ax.set_xlim(-1, 5.2); ax.set_xlabel("相对标准 KF 改善 (%)", fontsize=8)
+ax.set_title("(a) 相对标准 KF 的改善", fontsize=10)
 ax.tick_params(labelsize=8); ax.grid(axis="x", alpha=0.2)
 
 ax = fig.add_subplot(gs[1, 1])
@@ -55,7 +55,7 @@ ax.text(3.66, 68.5, "相干保持", fontsize=8, color=RED)
 ax.set_xlim(3.62, 3.95); ax.set_ylim(58, 71)
 ax.set_xlabel("留出 RMSE (mGal)", fontsize=8)
 ax.set_ylabel("5 km 覆盖 (%)", fontsize=8)
-ax.set_title("(c) 精度—结构权衡", fontsize=10)
+ax.set_title("(c) 日本区精度—结构", fontsize=10)
 ax.grid(alpha=0.2); ax.tick_params(labelsize=7)
 
 fig.text(0.5, 0.015,

@@ -89,6 +89,7 @@ def accuracy():
     kf = [res[k]["kf"] for k in keys]
     ckf = [res[k]["ckf"] for k in keys]
     imp = [(1 - c / s) * 100 for s, c in zip(ssv, ckf)]
+    imp_std = [(1 - c / k) * 100 for k, c in zip(kf, ckf)]
 
     fig = plt.figure(figsize=(13.4, 5.6), dpi=220)
     gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 1.15], hspace=0.30, wspace=0.22)
@@ -96,24 +97,28 @@ def accuracy():
     ax = fig.add_subplot(gs[0, :]); ax.axis("off")
     ax.set_xlim(0, 1); ax.set_ylim(0, 1)
     ax.set_title("(a) 三区 × 三方法 RMSE（mGal）", fontsize=12, pad=2)
-    cols = ["区域", "1′", "标准 KF", "相干保持 KF", "改善"]
-    widths = [0.20, 0.16, 0.20, 0.24, 0.20]
+    cols = ["区域", "1′", "标准 KF", "相干保持 KF", "vs 1′", "vs 标准 KF"]
+    widths = [0.16, 0.14, 0.17, 0.20, 0.15, 0.18]
     y = 1.0; h = 0.22
     x = 0
     for c, w in zip(cols, widths):
         ax.add_patch(Rectangle((x, y-h), w, h, fc=NAVY, ec="white", lw=1))
         ax.text(x+w/2, y-h/2, c, ha="center", va="center", color="white",
-                fontsize=10, fontweight="bold")
+                fontsize=9, fontweight="bold")
         x += w
-    for i, (n, s, k, c, im) in enumerate(zip(names, ssv, kf, ckf, imp)):
+    for i, (n, s, k, c, im, istd) in enumerate(zip(names, ssv, kf, ckf, imp, imp_std)):
         yy = y - h*(i+2)
-        vals = [n, f"{s:.2f}", f"{k:.2f}", f"{c:.2f}", f"{im:.1f}%"]
+        label = n if n != "菲律宾海" else "菲律宾海*"
+        vals = [label, f"{s:.2f}", f"{k:.2f}", f"{c:.2f}",
+                f"{im:.1f}%", f"{istd:+.1f}%"]
         x = 0
         for val, w in zip(vals, widths):
             ax.add_patch(Rectangle((x, yy), w, h, fc=LIGHT, ec="white", lw=1))
             ax.text(x+w/2, yy+h/2, val, ha="center", va="center",
-                    fontsize=10, color="#1A1A1A")
+                    fontsize=9, color="#1A1A1A")
             x += w
+    ax.text(0.0, 0.02, "* 菲律宾海相对标准 KF 略差，不能算增益", fontsize=8,
+            color=RED)
 
     ax = fig.add_subplot(gs[1, 0])
     x = np.arange(3); w = 0.26
