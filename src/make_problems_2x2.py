@@ -58,7 +58,7 @@ def main():
     keys = ["D_Nankai", "F_PhilSea", "G_Japan"]
     x = np.arange(3); w = 0.34
     ax.bar(x - w/2, [res[q]["ssv"] for q in keys], w, color="#D6E2F0", label="1′")
-    ax.bar(x + w/2, [res[q]["ckf"] for q in keys], w, color="#0B2545", label="相干保持 KF")
+    ax.bar(x + w/2, [res[q]["kf"] for q in keys], w, color="#0B2545", label="标准 KF")
     ax.set_xticks(x); ax.set_xticklabels(names, fontsize=9)
     ax.set_ylabel("RMSE (mGal)", fontsize=9)
     ax.set_title("(d) 固定 R：不同海域误差差异", fontsize=11)
