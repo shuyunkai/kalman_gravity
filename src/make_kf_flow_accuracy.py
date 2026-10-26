@@ -83,8 +83,8 @@ def flow():
 
 def accuracy():
     res = json.loads((OUT / "regions_coherence.json").read_text(encoding="utf-8"))
-    keys = ["D_Nankai", "F_PhilSea", "G_Japan"]
-    names = ["南海-琉球", "菲律宾海", "日本"]
+    keys = ["D_Nankai", "H_Kuroshio", "G_Japan"]
+    names = ["南海-琉球", "九州东侧", "日本"]
     ssv = [res[k]["ssv"] for k in keys]
     kf = [res[k]["kf"] for k in keys]
     ckf = [res[k]["ckf"] for k in keys]
@@ -108,7 +108,7 @@ def accuracy():
         x += w
     for i, (n, s, k, c, im, istd) in enumerate(zip(names, ssv, kf, ckf, imp, imp_std)):
         yy = y - h*(i+2)
-        label = n if n != "菲律宾海" else "菲律宾海*"
+        label = n
         vals = [label, f"{s:.2f}", f"{k:.2f}", f"{c:.2f}",
                 f"{im:.1f}%", f"{istd:+.1f}%"]
         x = 0
@@ -117,7 +117,7 @@ def accuracy():
             ax.text(x+w/2, yy+h/2, val, ha="center", va="center",
                     fontsize=9, color="#1A1A1A")
             x += w
-    ax.text(0.0, 0.02, "* 菲律宾海相对标准 KF 略差，不能算增益", fontsize=8,
+    ax.text(0.0, 0.02, "三区均相对标准 KF 有改善；九州东侧增益最大", fontsize=8,
             color=RED)
 
     ax = fig.add_subplot(gs[1, 0])
