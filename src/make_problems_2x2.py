@@ -53,17 +53,17 @@ def main():
     cb.set_label("mGal", fontsize=8); cb.ax.tick_params(labelsize=7)
 
     ax = axes[1, 1]
-    res = json.loads((OUT / "regions_coherence.json").read_text(encoding="utf-8"))
-    names = ["南海-琉球", "菲律宾海", "日本"]
-    keys = ["D_Nankai", "F_PhilSea", "G_Japan"]
-    x = np.arange(3); w = 0.34
-    ax.bar(x - w/2, [res[q]["ssv"] for q in keys], w, color="#D6E2F0", label="1′")
-    ax.bar(x + w/2, [res[q]["kf"] for q in keys], w, color="#0B2545", label="标准 KF")
-    ax.set_xticks(x); ax.set_xticklabels(names, fontsize=9)
-    ax.set_ylabel("RMSE (mGal)", fontsize=9)
-    ax.set_title("(d) 固定 R：不同海域误差差异", fontsize=11)
+    x = np.linspace(-10, 10, 400)
+    spike = np.exp(-(x / 0.45) ** 2)
+    smooth = np.exp(-(x / 4.0) ** 2)
+    ax.plot(x, spike, color="#C0392B", lw=1.8, label="标准 KF：单点")
+    ax.plot(x, smooth, color="#0B2545", lw=1.8, ls="--", label="邻域修正")
+    ax.axvline(0, color="#9E9E9E", lw=0.8)
+    ax.set_xlabel("离船测点距离（像元）", fontsize=9)
+    ax.set_ylabel("修正量（归一）", fontsize=9)
+    ax.set_title("(d) 单点更新 vs 邻域修正", fontsize=11)
     ax.legend(fontsize=8, frameon=False); ax.tick_params(labelsize=8)
-    ax.grid(axis="y", alpha=0.2)
+    ax.grid(alpha=0.2)
     fig.tight_layout()
     p = OUT / "fig_new_stdkf_problems_2x2.png"
     fig.savefig(p, bbox_inches="tight"); plt.close(fig)
