@@ -66,14 +66,14 @@ def main():
     std = [cov1, prec1]
     ckf = [cov, prec]
     y = np.arange(2); h = 0.30
-    ax.barh(y+h/2, std, h, color="#90A4AE", label="1′ 产品")
+    ax.barh(y+h/2, std, h, color="#90A4AE", label="SSV33.1（1′）")
     ax.barh(y-h/2, ckf, h, color="#0B2545", label="相干保持 KF")
     for i in range(2):
         ax.text(std[i]+1, y[i]+h/2, f"{std[i]:.1f}%", va="center", fontsize=7)
         ax.text(ckf[i]+1, y[i]-h/2, f"{ckf[i]:.1f}%", va="center", fontsize=7)
     ax.set_yticks(y); ax.set_yticklabels(labels, fontsize=8)
     ax.set_xlim(0, 100); ax.set_xlabel("百分比 (%)", fontsize=8)
-    ax.set_title("(a) 总精度：1′ vs 相干保持", fontsize=10)
+    ax.set_title("(a) SSV33.1 与相干保持 KF", fontsize=10)
     ax.legend(fontsize=7, frameon=False); ax.tick_params(labelsize=7)
     ax.grid(axis="x", alpha=0.2)
 
@@ -91,7 +91,7 @@ def main():
     radii = np.arange(1, 21)
     cov_curve = [(d_tm <= r).mean() * 100 for r in radii]
     cov_curve1 = [(d_tm1 <= r).mean() * 100 for r in radii]
-    ax.plot(radii, cov_curve1, "s--", color="#90A4AE", ms=2.5, label="1′ 产品")
+    ax.plot(radii, cov_curve1, "s--", color="#90A4AE", ms=2.5, label="SSV33.1")
     ax.plot(radii, cov_curve, "o-", color="#0B2545", ms=3, label="相干保持 KF")
     ax.axvline(5, color=RED, ls="--", lw=1)
     ax.set_xlabel("缓冲半径 (km)", fontsize=8); ax.set_ylabel("覆盖率 (%)", fontsize=8)
@@ -102,7 +102,7 @@ def main():
     d_ft = cKDTree(fp).query(pd)[0] / 1000
     d_ft1 = cKDTree(fp).query(pd1)[0] / 1000
     ax.hist(d_ft1[d_ft1 <= 30], bins=np.arange(0, 30, 1.5), color="#90A4AE",
-            edgecolor="white", alpha=0.7, label="1′ 产品")
+            edgecolor="white", alpha=0.7, label="SSV33.1")
     ax.hist(d_ft[d_ft <= 30], bins=np.arange(0, 30, 1.5), color="#0B2545",
             edgecolor="white", alpha=0.6, label="相干保持 KF")
     ax.axvline(5, color=RED, ls="--", lw=1)
@@ -118,7 +118,7 @@ def main():
     v = np.percentile(np.abs(g1[k:-k, k:-k]), 99)
     ax.imshow(g1[k:-k, k:-k], cmap="RdBu_r", origin="lower", vmin=-v, vmax=v,
               extent=ext, aspect="auto")
-    ax.set_title("(d) 1′ 产品（15″ 格网）", fontsize=10)
+    ax.set_title("(d) SSV33.1（1′，15″ 格网）", fontsize=10)
     ax.set_xlabel("经度 (°E)", fontsize=7); ax.set_ylabel("纬度 (°N)", fontsize=7)
     ax.tick_params(labelsize=6)
 
