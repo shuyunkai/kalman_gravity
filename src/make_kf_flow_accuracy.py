@@ -141,12 +141,14 @@ def accuracy():
     ix = np.clip(np.searchsorted(lon, val[:, 0]), 0, len(lon)-1)
     iy = np.clip(np.searchsorted(lat, val[:, 1]), 0, len(lat)-1)
     for name, fld, col in (("双线性", d["ssv"], "#D6E2F0"),
+                           ("频域融合", d["freq"], "#7FA8C9"),
+                           ("LSC", d["lsc"], GOLD),
                            ("相干保持 KF", d["ckf"], NAVY)):
         e = np.abs(fld[iy, ix] - val[:, 2])
-        ax.plot(np.sort(e), np.linspace(0, 1, len(e)), color=col, lw=1.6, label=name)
+        ax.plot(np.sort(e), np.linspace(0, 1, len(e)), color=col, lw=1.5, label=name)
     ax.set_xlim(0, 8); ax.set_xlabel("|误差| (mGal)", fontsize=9)
     ax.set_ylabel("累积比例", fontsize=9)
-    ax.set_title("(c) 误差 CDF（双线性 vs CKF）", fontsize=10)
+    ax.set_title("(c) 误差 CDF（日本区，四种 15″ 场）", fontsize=10)
     ax.legend(fontsize=8, frameon=False); ax.grid(alpha=0.2)
     ax.tick_params(labelsize=8)
     fig.savefig(OUT / "fig_new_accuracy_table.png", bbox_inches="tight")

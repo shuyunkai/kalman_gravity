@@ -57,6 +57,11 @@ def main():
         lsc = lsc_field(d["ssv_hr"], d["ship_grav"], d["train_mask"], dx_km)
         l_rmse = rmse_at(lsc, lon, lat, pts)
         res[name].update(bilinear=bil, freq=f_rmse, lsc=l_rmse)
+        if name == "G_Japan":
+            old = np.load(OUT / "validation_G_fields.npz")
+            np.savez(OUT / "validation_G_fields.npz", lon=lon, lat=lat,
+                     ssv=old["ssv"], kf=old["kf"], ckf=old["ckf"],
+                     freq=freq, lsc=lsc, val=old["val"])
         print(f"  bilinear {bil:.4f} freq {f_rmse:.4f} lsc {l_rmse:.4f} "
               f"ckf {res[name]['ckf']:.4f}")
     (OUT / "regions_coherence.json").write_text(
