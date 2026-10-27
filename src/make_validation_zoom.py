@@ -26,7 +26,7 @@ def main():
     ext = [lon[j0], lon[j1], lat[i0], lat[i1]]
 
     fig, axes = plt.subplots(2, 2, figsize=(12.6, 5.4), dpi=220)
-    for ax, name, fld in ((axes[0, 0], "(a) 常用 15″ 场（SSV，日本区）", ssv),
+    for ax, name, fld in ((axes[0, 0], "(a) 双线性 15″ 场（SSV，日本区）", ssv),
                           (axes[0, 1], "(b) 相干保持 KF（日本区）", ckf)):
         z = fld[i0:i1, j0:j1]
         v = np.nanpercentile(np.abs(z), 98)
@@ -41,7 +41,7 @@ def main():
     vd = np.nanpercentile(np.abs(diff), 98)
     im = ax.imshow(diff, cmap="PuOr_r", origin="lower", vmin=-vd, vmax=vd,
                    extent=ext, aspect="auto")
-    ax.set_title("(c) 相干保持 KF − 常用 15″ 场（日本区）", fontsize=10)
+    ax.set_title("(c) 相干保持 KF − 双线性 15″ 场（日本区）", fontsize=10)
     ax.set_xlabel("经度 (°E)", fontsize=8); ax.set_ylabel("纬度 (°N)", fontsize=8)
     ax.tick_params(labelsize=7)
     fig.colorbar(im, ax=ax, fraction=0.04, pad=0.02).set_label("mGal", fontsize=7)

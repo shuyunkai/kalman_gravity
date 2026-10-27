@@ -95,7 +95,7 @@ def accuracy():
     ax = fig.add_subplot(gs[0, :]); ax.axis("off")
     ax.set_xlim(0, 1); ax.set_ylim(0, 1)
     ax.set_title("(a) 三区 × 两方法 RMSE（mGal）", fontsize=12, pad=2)
-    cols = ["区域", "常用 15″ 场（SSV）", "相干保持 KF", "改善"]
+    cols = ["区域", "双线性 15″ 场（SSV）", "相干保持 KF", "改善"]
     widths = [0.20, 0.30, 0.28, 0.22]
     y = 1.0; h = 0.22
     x = 0
@@ -113,12 +113,12 @@ def accuracy():
             ax.text(x+w/2, yy+h/2, val, ha="center", va="center",
                     fontsize=9, color="#1A1A1A")
             x += w
-    ax.text(0.0, 0.02, "常用 15″ 场为 SSV33.1 的 1′ 双三次升尺度；三区均改善，九州东侧最大",
+    ax.text(0.0, 0.02, "双线性 15″ 场为 SSV33.1 的 1′ 双线性插值；三区均改善，九州东侧最大",
             fontsize=8, color=RED)
 
     ax = fig.add_subplot(gs[1, 0])
     x = np.arange(3); w = 0.30
-    ax.bar(x-w/2, ssv, w, color="#D6E2F0", label="常用 15″ 场")
+    ax.bar(x-w/2, ssv, w, color="#D6E2F0", label="双线性 15″ 场")
     ax.bar(x+w/2, ckf, w, color=NAVY, label="相干保持 KF")
     for i in range(3):
         ax.text(x[i]-w/2, ssv[i]+0.08, f"{ssv[i]:.2f}", ha="center", fontsize=7.5)
@@ -135,7 +135,7 @@ def accuracy():
     val = np.asarray(d["val"], float)
     ix = np.clip(np.searchsorted(lon, val[:, 0]), 0, len(lon)-1)
     iy = np.clip(np.searchsorted(lat, val[:, 1]), 0, len(lat)-1)
-    for name, fld, col in (("常用 15″ 场", d["ssv"], "#D6E2F0"),
+    for name, fld, col in (("双线性 15″ 场", d["ssv"], "#D6E2F0"),
                            ("相干保持 KF", d["ckf"], NAVY)):
         e = np.abs(fld[iy, ix] - val[:, 2])
         ax.plot(np.sort(e), np.linspace(0, 1, len(e)), color=col, lw=1.6, label=name)
