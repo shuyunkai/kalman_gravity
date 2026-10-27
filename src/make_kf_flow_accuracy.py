@@ -86,19 +86,17 @@ def accuracy():
     keys = ["D_Nankai", "H_Kuroshio", "G_Japan"]
     names = ["南海-琉球", "九州东侧", "日本"]
     ssv = [res[k]["ssv"] for k in keys]
-    kf = [res[k]["kf"] for k in keys]
     ckf = [res[k]["ckf"] for k in keys]
     imp = [(1 - c / s) * 100 for s, c in zip(ssv, ckf)]
-    imp_std = [(1 - c / k) * 100 for k, c in zip(kf, ckf)]
 
     fig = plt.figure(figsize=(13.4, 5.6), dpi=220)
     gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 1.15], hspace=0.30, wspace=0.22)
 
     ax = fig.add_subplot(gs[0, :]); ax.axis("off")
     ax.set_xlim(0, 1); ax.set_ylim(0, 1)
-    ax.set_title("(a) 三区 × 三方法 RMSE（mGal）", fontsize=12, pad=2)
-    cols = ["区域", "1′", "标准 KF", "相干保持 KF", "vs 1′", "vs 标准 KF"]
-    widths = [0.16, 0.14, 0.17, 0.20, 0.15, 0.18]
+    ax.set_title("(a) 三区 × 两方法 RMSE（mGal）", fontsize=12, pad=2)
+    cols = ["区域", "常用 15″ 场（SSV）", "相干保持 KF", "改善"]
+    widths = [0.20, 0.30, 0.28, 0.22]
     y = 1.0; h = 0.22
     x = 0
     for c, w in zip(cols, widths):
@@ -106,27 +104,25 @@ def accuracy():
         ax.text(x+w/2, y-h/2, c, ha="center", va="center", color="white",
                 fontsize=9, fontweight="bold")
         x += w
-    for i, (n, s, k, c, im, istd) in enumerate(zip(names, ssv, kf, ckf, imp, imp_std)):
+    for i, (n, s, c, im) in enumerate(zip(names, ssv, ckf, imp)):
         yy = y - h*(i+2)
-        label = n
-        vals = [label, f"{s:.2f}", f"{k:.2f}", f"{c:.2f}",
-                f"{im:.1f}%", f"{istd:+.1f}%"]
+        vals = [n, f"{s:.2f}", f"{c:.2f}", f"{im:.1f}%"]
         x = 0
         for val, w in zip(vals, widths):
             ax.add_patch(Rectangle((x, yy), w, h, fc=LIGHT, ec="white", lw=1))
             ax.text(x+w/2, yy+h/2, val, ha="center", va="center",
                     fontsize=9, color="#1A1A1A")
             x += w
-    ax.text(0.0, 0.02, "三区均相对标准 KF 有改善；九州东侧增益最大", fontsize=8,
-            color=RED)
+    ax.text(0.0, 0.02, "常用 15″ 场为 SSV33.1 的 1′ 双三次升尺度；三区均改善，九州东侧最大",
+            fontsize=8, color=RED)
 
     ax = fig.add_subplot(gs[1, 0])
-    x = np.arange(3); w = 0.26
-    ax.bar(x-w, ssv, w, color="#D6E2F0", label="1′")
-    ax.bar(x, kf, w, color="#2E5C8A", label="标准 KF")
-    ax.bar(x+w, ckf, w, color=NAVY, label="相干保持 KF")
+    x = np.arange(3); w = 0.30
+    ax.bar(x-w/2, ssv, w, color="#D6E2F0", label="常用 15″ 场")
+    ax.bar(x+w/2, ckf, w, color=NAVY, label="相干保持 KF")
     for i in range(3):
-        ax.text(x[i]+w, ckf[i]+0.08, f"{ckf[i]:.2f}", ha="center", fontsize=8)
+        ax.text(x[i]-w/2, ssv[i]+0.08, f"{ssv[i]:.2f}", ha="center", fontsize=7.5)
+        ax.text(x[i]+w/2, ckf[i]+0.08, f"{ckf[i]:.2f}", ha="center", fontsize=7.5)
     ax.set_xticks(x); ax.set_xticklabels(names, fontsize=9)
     ax.set_ylabel("RMSE (mGal)", fontsize=9)
     ax.set_title("(b) 分组对比", fontsize=11)
@@ -139,11 +135,10 @@ def accuracy():
     val = np.asarray(d["val"], float)
     ix = np.clip(np.searchsorted(lon, val[:, 0]), 0, len(lon)-1)
     iy = np.clip(np.searchsorted(lat, val[:, 1]), 0, len(lat)-1)
-    for name, fld, col in (("1′", d["ssv"], "#D6E2F0"),
-                           ("标准 KF", d["kf"], "#2E5C8A"),
+    for name, fld, col in (("常用 15″ 场", d["ssv"], "#D6E2F0"),
                            ("相干保持 KF", d["ckf"], NAVY)):
         e = np.abs(fld[iy, ix] - val[:, 2])
-        ax.plot(np.sort(e), np.linspace(0, 1, len(e)), color=col, lw=1.5, label=name)
+        ax.plot(np.sort(e), np.linspace(0, 1, len(e)), color=col, lw=1.6, label=name)
     ax.set_xlim(0, 8); ax.set_xlabel("|误差| (mGal)", fontsize=9)
     ax.set_ylabel("累积比例", fontsize=9)
     ax.set_title("(c) 误差 CDF", fontsize=11)
