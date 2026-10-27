@@ -18,8 +18,8 @@ ext = [lon[j0], lon[j1], lat[i0], lat[i1]]
 
 fields = [("(a) 双线性", ssv), ("(b) 频域融合", freq),
           ("(c) LSC", lsc), ("(d) 相干保持 KF", ckf)]
-diffs = [("(e) CKF − 双线性", ckf - ssv), ("(f) CKF − 频域", ckf - freq),
-         ("(g) CKF − LSC", ckf - lsc)]
+diffs = [("(e) 相干保持 KF − 双线性", ckf - ssv), ("(f) 相干保持 KF − 频域", ckf - freq),
+         ("(g) 相干保持 KF − LSC", ckf - lsc)]
 
 fig, axes = plt.subplots(2, 4, figsize=(13.4, 5.4), dpi=220)
 for ax, (name, fld) in zip(axes[0], fields):
