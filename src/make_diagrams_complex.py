@@ -28,8 +28,7 @@ def concept():
     im = ax.imshow(gv, cmap="RdBu_r", origin="lower",
                    extent=[glon[0], glon[-1], glat[0], glat[-1]],
                    vmin=-100, vmax=100, aspect="auto")
-    ax.set_title("(a) 全球海洋重力异常（SSV33.1，1′）\n本文使用的 1′ 产品",
-                 fontsize=9.5, pad=4)
+    ax.set_title("(a) 全球海洋重力异常（SSV33.1，1′）", fontsize=11, pad=4)
     ax.set_xlabel("经度 (°E)", fontsize=8); ax.set_ylabel("纬度 (°N)", fontsize=8)
     ax.tick_params(labelsize=7)
     fig.colorbar(im, ax=ax, fraction=0.04, pad=0.02).set_label("mGal", fontsize=7)
