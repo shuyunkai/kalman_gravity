@@ -42,9 +42,6 @@ ax.text(0.5, -0.22, "$T_i(k)=1-wc_i^2(1-e^{-k^2\\sigma^2/2})$",
         transform=ax.transAxes, ha="center", fontsize=10, color=RED)
 
 ax = axes[2]; ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
-ax.text(0.5, 0.965, "(c) $C$ 的取值", ha="center", fontsize=12,
-        color=NAVY, fontweight="bold")
-ax.plot([0.08, 0.92], [0.915, 0.915], color=GOLD, lw=1.2)
 
 
 def sec(y, num, title):
