@@ -66,7 +66,7 @@ arr((0.82, 0.29), (0.86, 0.21))
 
 ax.text(0.5, 0.02,
         "先验：$x_0$ = SSV 块平均 + α·地形布格高频；$P_0$、$Q$、$R$ 固定；"
-        "相干保持预测：$x^-=(1-wC^2)G_\\sigma x+wC^2x$",
+        "相干保持预测：$A=(1-wC^2)G_\\sigma+wC^2I$，$x^-=Ax$",
         ha="center", fontsize=8, color=RED)
 
 fig.savefig(f"{ROOT}/fig_new_kf_flow_full.png", bbox_inches="tight")
