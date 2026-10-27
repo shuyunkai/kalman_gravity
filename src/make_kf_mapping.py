@@ -12,11 +12,11 @@ plt.rcParams.update({"font.sans-serif": ["Microsoft YaHei"],
 fig, ax = plt.subplots(figsize=(13.4, 5.2), dpi=220)
 ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
 
-ax.text(0.5, 0.96, "标准 KF 的各个环节，分别对应前面三类方法的缺点", ha="center",
+ax.text(0.5, 0.96, "三类问题在标准 KF 中的处理位置", ha="center",
         fontsize=12, color=NAVY, fontweight="bold")
-ax.text(0.16, 0.87, "前面方法的缺点", ha="center", fontsize=10, color=RED)
-ax.text(0.49, 0.87, "KF 对应环节", ha="center", fontsize=10, color=NAVY)
-ax.text(0.82, 0.87, "怎么解决", ha="center", fontsize=10, color=GOLD)
+ax.text(0.16, 0.87, "三类方法的限制", ha="center", fontsize=10, color=RED)
+ax.text(0.49, 0.87, "KF 中的环节", ha="center", fontsize=10, color=NAVY)
+ax.text(0.82, 0.87, "处理方式", ha="center", fontsize=10, color=GOLD)
 
 rows = [
     ("插值：短波被平滑", "② 观测更新", "块观测 + 船测点\n把短波重新注入"),
@@ -45,7 +45,7 @@ for i, (left, mid, right) in enumerate(rows):
                                  arrowstyle="-|>", mutation_scale=13,
                                  color="#78909C", lw=1.2))
 
-ax.text(0.5, 0.03, "先由 KF 统一表达观测、噪声和协方差，再由后续相干预测与局部化改进",
+ax.text(0.5, 0.03, "P、R、Q 把观测噪声、过程和空间相关显式表达",
         ha="center", fontsize=9, color=RED)
 fig.savefig(f"{ROOT}/fig_new_kf_mapping.png", bbox_inches="tight")
 print("saved")
