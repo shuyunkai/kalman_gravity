@@ -45,7 +45,7 @@ ax.text(0.5, 0.96, "(c) 公式与频响的含义", ha="center", fontsize=12,
         color=NAVY, fontweight="bold")
 lines = [
     "标准 KF：$A=G_\\sigma$",
-    "5–20 km 的 $H(k)$ 只有 0.04–0.45，",
+    "5–20 km 的 $H(k)$ 从近 0 升到 0.45，",
     "短波被压低，脊线变钝。",
     "",
     "相干保持：$A=(1-wC^2)G_\\sigma+wC^2$",

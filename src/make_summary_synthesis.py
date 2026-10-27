@@ -15,7 +15,7 @@ gs = fig.add_gridspec(2, 3, height_ratios=[1.0, 1.65], hspace=0.42, wspace=0.32)
 
 cards = [("15″", "分辨率", "1.85 km 网格"),
          ("1.4–14.6%", "精度改善（三区）", "相对标准 KF"),
-         ("67.9%", "5 km 断裂覆盖", "命中 44.5%")]
+         ("81.0%", "5 km 断裂覆盖", "命中 24.0%")]
 for i, (val, name, sub) in enumerate(cards):
     ax = fig.add_subplot(gs[0, i]); ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
     ax.add_patch(FancyBboxPatch((0.03, 0.05), 0.94, 0.90,
@@ -37,7 +37,7 @@ ax.tick_params(labelsize=8); ax.grid(axis="x", alpha=0.2)
 
 ax = fig.add_subplot(gs[1, 1])
 labels = ["5 km 覆盖", "5 km 命中"]
-vals2 = [67.9, 44.5]
+vals2 = [81.0, 24.0]
 ax.barh(labels, vals2, color=[NAVY, GOLD], height=0.5)
 for i, v in enumerate(vals2):
     ax.text(v+1, i, f"{v}%", va="center", fontsize=8)
@@ -46,20 +46,24 @@ ax.set_title("(b) 断裂识别指标", fontsize=10)
 ax.tick_params(labelsize=8); ax.grid(axis="x", alpha=0.2)
 
 ax = fig.add_subplot(gs[1, 2])
-ax.scatter([3.88], [62.1], s=70, c="#2E5C8A", zorder=3)
-ax.scatter([3.71], [67.9], s=90, c=RED, zorder=3)
-ax.annotate("", xy=(3.73, 67.3), xytext=(3.86, 62.7),
-            arrowprops=dict(arrowstyle="-|>", color=RED, lw=1.4))
-ax.text(3.885, 61.4, "标准 KF", fontsize=8, color="#2E5C8A")
-ax.text(3.66, 68.5, "相干保持", fontsize=8, color=RED)
-ax.set_xlim(3.62, 3.95); ax.set_ylim(58, 71)
-ax.set_xlabel("留出 RMSE (mGal)", fontsize=8)
-ax.set_ylabel("5 km 覆盖 (%)", fontsize=8)
-ax.set_title("(c) 日本区精度—结构", fontsize=10)
-ax.grid(alpha=0.2); ax.tick_params(labelsize=7)
+ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+ax.set_title("(c) 方法链", fontsize=10)
+steps = ["1′ + 船测 + 地形", "相干保持 KF", "15″ 场 + P", "精度 / 断裂"]
+for i, s in enumerate(steps):
+    y = 0.78 - i*0.245
+    ax.add_patch(FancyBboxPatch((0.05, y), 0.90, 0.16,
+                                boxstyle="round,pad=0.012,rounding_size=0.03",
+                                fc="#EEF3F9" if i < 3 else "#FFF8E7",
+                                ec=NAVY if i < 3 else GOLD, lw=1))
+    ax.text(0.5, y+0.08, s, ha="center", va="center", fontsize=9,
+            color=NAVY if i < 3 else RED, fontweight="bold" if i == 3 else "normal")
+    if i < 3:
+        ax.add_patch(FancyArrowPatch((0.5, y-0.005), (0.5, y-0.045),
+                                     arrowstyle="-|>", mutation_scale=12,
+                                     color="#78909C", lw=1.2))
 
 fig.text(0.5, 0.015,
-         "方法链：1′ + 船测 + 地形  →  相干保持 KF  →  15″ 场 + P  →  精度 / 断裂验证",
+         "同一套 15″ 场同时给出重力精度与断裂指标，不再为两个任务各做一套场",
          ha="center", fontsize=9, color=NAVY)
 fig.savefig(f"{ROOT}/fig_new_summary_synthesis.png", bbox_inches="tight")
 print("saved")

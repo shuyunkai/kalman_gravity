@@ -22,7 +22,7 @@ rows = [
     ("插值：短波被平滑", "② 观测更新", "块观测 + 船测点\n把短波重新注入"),
     ("频域：边界振铃", "空间域递推", "无 FFT 周期边界\n局部更新"),
     ("LSC：协方差选择/求逆", "③ 增益 + R/Q", "块增益\n避免全局协方差求逆"),
-    ("共同：噪声/相关未显式", "P / R / Q + 相干预测", "噪声、方差、空间相关\n进入增益"),
+    ("共同：噪声/权重靠人工", "R / Q + 增益", "噪声定权\n并给出方差"),
 ]
 for i, (left, mid, right) in enumerate(rows):
     y = 0.66 - i*0.18
@@ -45,7 +45,7 @@ for i, (left, mid, right) in enumerate(rows):
                                  arrowstyle="-|>", mutation_scale=13,
                                  color="#78909C", lw=1.2))
 
-ax.text(0.5, 0.03, "P、R、Q 把观测噪声、过程和空间相关显式表达",
+ax.text(0.5, 0.03, "P、R、Q 把观测噪声、过程和状态不确定度显式表达",
         ha="center", fontsize=9, color=RED)
 fig.savefig(f"{ROOT}/fig_new_kf_mapping.png", bbox_inches="tight")
 print("saved")
