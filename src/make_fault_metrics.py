@@ -38,9 +38,9 @@ def main():
     dy = float(lat[1] - lat[0]) * 111320
     b = bandpass(g, dx, dy, 5e3, 20e3)
     t = thg(b, dx, dy) * 1000
-    mask = filter_lineaments(lineament_mask(b, dx, dy, pct=75), 20, 1.8)
+    mask = filter_lineaments(lineament_mask(b, dx, dy, pct=60), 20, 1.8)
     b1 = bandpass(g1, dx, dy, 5e3, 20e3)
-    mask1 = filter_lineaments(lineament_mask(b1, dx, dy, pct=75), 20, 1.8)
+    mask1 = filter_lineaments(lineament_mask(b1, dx, dy, pct=60), 20, 1.8)
 
     lines = []
     for f in json.load(open(ROOT / "output_real/three_parts/nz_gm9_offshore.json",
