@@ -9,8 +9,8 @@ from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.util import Inches, Pt
 
 ROOT = Path(__file__).parent.parent
-PPT_SRC = ROOT / "ppt" / "_石大空白_15页.pptx"
-PPT_OUT = ROOT / "ppt" / "汇报_石大模板_15页.pptx"
+PPT_SRC = ROOT / "ppt" / "_石大空白_16页.pptx"
+PPT_OUT = ROOT / "ppt" / "汇报_石大模板_16页.pptx"
 NEW = ROOT / "output_real" / "three_parts" / "newdeck"
 
 GOLD = RGBColor(0xC9, 0xA2, 0x27)
@@ -64,16 +64,20 @@ PAGES = [
      "迭代 6 轮并做 RTS 平滑。这样做是为了让块观测、先验和船测在同一递推中分配权重。",
      NEW / "fig_new_kf_flow_full.png"),
     ("本项目 KF 重建过程",
-     "以 1′ 和船测为输入，先验加入地形高频，经 6 轮块观测更新，修正量集中在测线与构造带；"
-     "这样做的原因是让修正沿构造扩散，而不是全局重算，从而在保住长波的同时补出短波。",
+     "先以 SSV 与地形高频构造初始先验，再把 1′ 块观测和船测逐轮加入，6 轮后得到后验；"
+     "修正集中在测线与构造带。先验只作初始场，后续由观测更新。",
      NEW / "fig_new_iterations_mixed.png"),
     ("精度总结",
      "三个区域都用整条航次留出，分别比较双线性、频域融合、LSC 三种常用 15″ 场与相干保持 KF；"
      "三场都以 SSV33.1 的 1′ 为输入，改善相对其中最优场。",
      NEW / "fig_new_accuracy_table.png"),
+    ("三种常用场与 CKF 的差异",
+     "把双线性、频域融合、LSC 与 CKF 放在同一日本区窗口：上排是场，下排是 CKF 相对各场的差值；"
+     "差值集中在构造与测线附近，说明 CKF 补的是短波，不是整体平移。",
+     NEW / "fig_new_methods_diff.png"),
     ("验证",
      "三个有船测的区域按整条航次留出，训练时不使用该航次；"
-     "下图以日本区、双线性场为例展示局部差异，三区统计见前一页。这样检验的是对未知测线的预测能力。",
+     "下图以日本区、双线性场为例展示局部差异，三区统计见精度总结页。这样检验的是对未知测线的预测能力。",
      NEW / "fig_new_validation_zoom.png"),
     ("断层",
      "把 SSV33.1（1′）与相干保持 KF 场放在同一套 5–20 km 带通、THG 和 60% 分位阈值下提取线性体，"
@@ -96,14 +100,15 @@ HIGHLIGHTS = [
     ["对角 P", "块平均", "条带", "单点更新"],
     ["相干保持卡尔曼滤波", "结构张量相干 C", "5–20 km", "不牺牲重力 RMSE"],
     ["1′ 观测", "地形高频", "6 轮", "RTS", "同一递推"],
-    ["地形高频", "6 轮", "测线与构造带", "沿构造扩散"],
+    ["初始先验", "1′ 块观测", "船测", "6 轮后验"],
     ["整条航次留出", "三种常用场", "相干保持 KF"],
+    ["双线性", "频域融合", "LSC", "CKF−常用场"],
     ["整条航次留出", "日本区", "未知测线"],
     ["SSV33.1", "相干保持 KF", "5–20 km", "THG"],
     ["15″ 场", "精度", "短波结构"],
 ]
 
-NUMS = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五"]
+NUMS = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五", "十六"]
 
 
 def clear(slide):
@@ -179,7 +184,7 @@ for i, (title, body, fig) in enumerate(PAGES):
     y = 2.40 + (max_h - h) / 2
     s.shapes.add_picture(str(fig), Inches(x), Inches(y), width=Inches(w))
 
-    add_text(s, 12.05, 7.10, 1.0, 0.28, f"{i+1} / 15", 9,
+    add_text(s, 12.05, 7.10, 1.0, 0.28, f"{i+1} / 16", 9,
              RGBColor(0xD9, 0xC8, 0x9A), bold=False, align=PP_ALIGN.RIGHT)
 
 prs.save(PPT_OUT)

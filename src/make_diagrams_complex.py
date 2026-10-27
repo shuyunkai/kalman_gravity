@@ -27,7 +27,8 @@ def concept():
     im = ax.imshow(gv, cmap="RdBu_r", origin="upper",
                    extent=[glon[0], glon[-1], glat[-1], glat[0]],
                    vmin=-100, vmax=100, aspect="auto")
-    ax.set_title("(a) 全球自由空气重力异常（EGM2008）", fontsize=11)
+    ax.set_title("(a) 全球自由空气重力异常（EGM2008）\n长波背景，不作为 1′ 产品",
+                 fontsize=9.5, pad=4)
     ax.set_xlabel("经度 (°E)", fontsize=8); ax.set_ylabel("纬度 (°N)", fontsize=8)
     ax.tick_params(labelsize=7)
     fig.colorbar(im, ax=ax, fraction=0.04, pad=0.02).set_label("mGal", fontsize=7)
@@ -42,20 +43,18 @@ def concept():
 
     bands = [
         (100, 1000, 20, 40, "#D6E2F0", "地幔 / 地壳厚度"),
-        (20, 100, 5, 20, "#F4D9B0", "海山 / 盆地"),
-        (5, 20, 1, 5, "#F2B8B5", "断裂 / 海底地形"),
-        (1, 5, 0, 1, "#C8E6C9", "浅部噪声"),
+        (20, 100, 6, 20, "#F4D9B0", "海山 / 盆地"),
+        (5, 20, 1.5, 6, "#F2B8B5", "断裂 / 海底地形"),
+        (1, 5, 0.2, 1.5, "#C8E6C9", "浅部噪声"),
     ]
     for x0, x1, y0, y1, c, lab in bands:
         ax.add_patch(plt.Rectangle((x0, y0), x1-x0, y1-y0, fc=c, ec="white",
                                    alpha=0.9, lw=1))
         ax.text(np.sqrt(x0*x1), (y0+y1)/2, lab, ha="center", va="center",
                 fontsize=8, color=NAVY)
-    ax.axvspan(5, 20, color="none", ec=RED, lw=1.6, ls="--")
+    ax.add_patch(plt.Rectangle((5, 1.5), 15, 4.5, fill=False, ec=RED,
+                               lw=1.6, ls="--"))
     ax.text(10, 38, "15″ 目标：5–20 km", ha="center", fontsize=8, color=RED)
-    ax.annotate("", xy=(5, 3), xytext=(1, 3),
-                arrowprops=dict(arrowstyle="<->", color=RED, lw=1.2))
-    ax.text(2, 3.6, "短波", fontsize=8, color=RED)
     fig.savefig(OUT / "fig_new_concept_rich.png", bbox_inches="tight")
     plt.close(fig)
 

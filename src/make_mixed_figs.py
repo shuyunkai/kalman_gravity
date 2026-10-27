@@ -197,8 +197,8 @@ def main():
               ship=data["ship_grav"], train=data["train_mask"],
               return_reconstructor=True)
     fig, axes = plt.subplots(2, 3, figsize=(13.4, 5.2), dpi=220)
-    for ax, name, fld in ((axes[0, 0], "(a) 输入：1′ + 船测", data["ssv_hr"]),
-                          (axes[0, 1], "(b) 先验：SSV + 地形", r.prior_2d),
+    for ax, name, fld in ((axes[0, 0], "(a) 先验：SSV + 地形", r.prior_2d),
+                          (axes[0, 1], "(b) 观测：1′ + 船测", data["ssv_hr"]),
                           (axes[1, 0], "(d) 第 6 轮", r.x_history[5])):
         im = ax.imshow(fld[sub], cmap="RdBu_r", origin="lower", vmin=-v, vmax=v,
                        extent=ext, aspect="auto")
@@ -207,7 +207,7 @@ def main():
         ax.tick_params(labelsize=8)
         cb = fig.colorbar(im, ax=ax, fraction=0.04, pad=0.02)
         cb.set_label("mGal", fontsize=8); cb.ax.tick_params(labelsize=7)
-    axes[0, 0].scatter(val[::6, 0], val[::6, 1], s=0.5, c="k", alpha=0.5)
+    axes[0, 1].scatter(val[::6, 0], val[::6, 1], s=0.5, c="k", alpha=0.5)
 
     ax = axes[0, 2]
     chg = [float(np.sqrt(np.mean((r.x_history[i] - (r.prior_2d if i == 0 else r.x_history[i-1])) ** 2)))
@@ -222,7 +222,7 @@ def main():
     vi = np.nanpercentile(np.abs(inc[sub]), 98)
     im = ax.imshow(inc[sub], cmap="PuOr_r", origin="lower", vmin=-vi, vmax=vi,
                    extent=ext, aspect="auto")
-    ax.set_title("(e) 第 6 轮 − 先验", fontsize=11)
+    ax.set_title("(e) 第 6 轮 − 初始先验", fontsize=11)
     ax.set_xlabel("经度 (°E)", fontsize=9); ax.set_ylabel("纬度 (°N)", fontsize=9)
     ax.tick_params(labelsize=8)
     cb = fig.colorbar(im, ax=ax, fraction=0.04, pad=0.02)
@@ -231,13 +231,18 @@ def main():
     ax = axes[1, 2]
     ix = np.clip(np.searchsorted(lon, val[:, 0]), 0, len(lon)-1)
     iy = np.clip(np.searchsorted(lat, val[:, 1]), 0, len(lat)-1)
-    ax.hexbin(val[:, 2], r.x_history[5][iy, ix], gridsize=60, cmap="magma",
-              mincnt=1, bins="log")
-    lo, hi = np.percentile(val[:, 2], [1, 99])
-    ax.plot([lo, hi], [lo, hi], "--", color="cyan", lw=1)
-    ax.set_xlim(lo, hi); ax.set_ylim(lo, hi)
-    ax.set_xlabel("船测 (mGal)", fontsize=9); ax.set_ylabel("模型 (mGal)", fontsize=9)
-    ax.set_title("(f) 船测—模型散点", fontsize=11)
+    ep = r.prior_2d[iy, ix] - val[:, 2]
+    eq = r.x_history[5][iy, ix] - val[:, 2]
+    rp = float(np.sqrt(np.mean(ep ** 2)))
+    rq = float(np.sqrt(np.mean(eq ** 2)))
+    bins = np.linspace(-20, 20, 41)
+    ax.hist(ep, bins=bins, alpha=0.55, color="#90A4AE",
+            label=f"初始先验  RMSE {rp:.2f}")
+    ax.hist(eq, bins=bins, alpha=0.65, color=NAVY,
+            label=f"第 6 轮  RMSE {rq:.2f}")
+    ax.set_xlabel("船测残差 (mGal)", fontsize=9); ax.set_ylabel("点数", fontsize=9)
+    ax.set_title("(f) 船测残差：初始先验 vs 第 6 轮", fontsize=10)
+    ax.legend(fontsize=7, frameon=False); ax.grid(axis="y", alpha=0.2)
     ax.tick_params(labelsize=8)
     fig.tight_layout(); fig.savefig(OUT / "fig_new_iterations_mixed.png", bbox_inches="tight")
     print("saved mixed figs")

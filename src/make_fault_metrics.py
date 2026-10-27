@@ -116,27 +116,30 @@ def main():
     ext = [lon[k], lon[-k], lat[k], lat[-k]]
     ax = axes[1, 0]
     v = np.percentile(np.abs(g1[k:-k, k:-k]), 99)
-    ax.imshow(g1[k:-k, k:-k], cmap="RdBu_r", origin="lower", vmin=-v, vmax=v,
-              extent=ext, aspect="auto")
+    im = ax.imshow(g1[k:-k, k:-k], cmap="RdBu_r", origin="lower", vmin=-v, vmax=v,
+                   extent=ext, aspect="auto")
     ax.set_title("(d) SSV33.1（1′，15″ 格网）", fontsize=10)
     ax.set_xlabel("经度 (°E)", fontsize=7); ax.set_ylabel("纬度 (°N)", fontsize=7)
     ax.tick_params(labelsize=6)
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02).set_label("mGal", fontsize=6)
 
     ax = axes[1, 1]
     v = np.percentile(np.abs(g[k:-k, k:-k]), 99)
-    ax.imshow(g[k:-k, k:-k], cmap="RdBu_r", origin="lower", vmin=-v, vmax=v,
-              extent=ext, aspect="auto")
+    im = ax.imshow(g[k:-k, k:-k], cmap="RdBu_r", origin="lower", vmin=-v, vmax=v,
+                   extent=ext, aspect="auto")
     ax.set_title("(e) 相干保持 KF 场", fontsize=10)
     ax.set_xlabel("经度 (°E)", fontsize=7); ax.tick_params(labelsize=6)
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02).set_label("mGal", fontsize=6)
 
     ax = axes[1, 2]
     vt = np.percentile(t[k:-k, k:-k], 99)
-    ax.imshow(t[k:-k, k:-k], cmap="inferno", origin="lower", vmin=0, vmax=vt,
-              extent=ext, aspect="auto")
+    im = ax.imshow(t[k:-k, k:-k], cmap="inferno", origin="lower", vmin=0, vmax=vt,
+                   extent=ext, aspect="auto")
     ax.contour(lon[k:-k], lat[k:-k], mask[k:-k, k:-k], levels=[0.5],
                colors="cyan", linewidths=0.4)
-    ax.set_title("(f) THG + 脊线", fontsize=10)
+    ax.set_title("(f) THG + 脊线（青）", fontsize=10)
     ax.set_xlabel("经度 (°E)", fontsize=7); ax.tick_params(labelsize=6)
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02).set_label("THG (Eötvös)", fontsize=6)
 
     fig.tight_layout()
     p = OUT / "fig_new_fault_metrics.png"
