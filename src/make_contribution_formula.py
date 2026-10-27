@@ -42,23 +42,46 @@ ax.text(0.5, -0.22, "$T_i(k)=1-wc_i^2(1-e^{-k^2\\sigma^2/2})$",
         transform=ax.transAxes, ha="center", fontsize=10, color=RED)
 
 ax = axes[2]; ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
-ax.text(0.5, 0.97, "(c) $C$ 的取值", ha="center", fontsize=12,
+ax.text(0.5, 0.965, "(c) $C$ 的取值", ha="center", fontsize=12,
         color=NAVY, fontweight="bold")
-ax.text(0.03, 0.88, "1. 由 GEBCO 地形得布格高频 $h_p$", fontsize=8.5, va="center")
-ax.text(0.03, 0.79, "2. 求梯度", fontsize=8.5, va="center")
-ax.text(0.5, 0.70, "$g_x=\\partial h/\\partial x,\\quad g_y=\\partial h/\\partial y$",
-        fontsize=9, ha="center", va="center")
-ax.text(0.03, 0.60, "3. 构造结构张量", fontsize=8.5, va="center")
-ax.text(0.5, 0.52, "$J_{xx}=G_8(g_x^2),\\quad J_{yy}=G_8(g_y^2)$",
-        fontsize=8, ha="center", va="center")
-ax.text(0.5, 0.45, "$J_{xy}=G_8(g_xg_y)$", fontsize=8, ha="center", va="center")
-ax.text(0.03, 0.37, "$G_8$：8 格点高斯平滑，15″ 下约 3.7 km",
-        fontsize=7.5, va="center", color="#44546A")
-ax.text(0.03, 0.30, "4. 相干", fontsize=8.5, va="center")
-ax.text(0.5, 0.19,
+ax.plot([0.08, 0.92], [0.915, 0.915], color=GOLD, lw=1.2)
+
+
+def sec(y, num, title):
+    ax.text(0.03, y, num, fontsize=7, color=GOLD, fontweight="bold", va="center")
+    ax.text(0.10, y, title, fontsize=8.5, color=NAVY, fontweight="bold", va="center")
+
+
+def rule(y):
+    ax.plot([0.03, 0.97], [y, y], color="#D9E2EC", lw=0.8)
+
+
+sec(0.865, "01", "由地形得布格高频 $h_p$")
+ax.text(0.5, 0.805, "GEBCO 地形 $\\rightarrow$ 布格高频 $h_p$",
+        fontsize=8.5, ha="center", va="center", color="#44546A")
+rule(0.765)
+
+sec(0.720, "02", "求梯度")
+ax.text(0.5, 0.660, "$g_x=\\partial h/\\partial x,\\quad g_y=\\partial h/\\partial y$",
+        fontsize=9.5, ha="center", va="center")
+rule(0.615)
+
+sec(0.570, "03", "构造结构张量")
+ax.text(0.5, 0.512, "$J_{xx}=G_8(g_x^2),\\quad J_{yy}=G_8(g_y^2)$",
+        fontsize=8.8, ha="center", va="center")
+ax.text(0.5, 0.468, "$J_{xy}=G_8(g_xg_y)$", fontsize=8.8, ha="center", va="center")
+ax.text(0.5, 0.428, "$G_8$：8 格点高斯平滑，15″ 下约 3.7 km",
+        fontsize=7.2, ha="center", va="center", color="#44546A")
+rule(0.388)
+
+sec(0.342, "04", "相干")
+ax.text(0.5, 0.248,
         "$C_i=\\frac{\\sqrt{(J_{xx}-J_{yy})^2+4J_{xy}^2}}{J_{xx}+J_{yy}+\\epsilon}$",
         fontsize=9.5, ha="center", va="center")
-ax.text(0.03, 0.10, "5. 截断并平方：$0\\leq C_i\\leq1$", fontsize=8.5, va="center")
-ax.text(0.03, 0.04, "权重 $wC_i^2$", fontsize=8.5, va="center")
+rule(0.198)
+
+sec(0.152, "05", "截断并平方")
+ax.text(0.5, 0.095, "$0\\leq C_i\\leq1,\\qquad wC_i^2$",
+        fontsize=9.5, ha="center", va="center")
 fig.savefig(f"{ROOT}/fig_new_contribution_formula.png", bbox_inches="tight")
 print("saved")
