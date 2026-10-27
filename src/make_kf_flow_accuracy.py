@@ -85,49 +85,54 @@ def accuracy():
     res = json.loads((OUT / "regions_coherence.json").read_text(encoding="utf-8"))
     keys = ["D_Nankai", "H_Kuroshio", "G_Japan"]
     names = ["南海-琉球", "九州东侧", "日本"]
-    ssv = [res[k]["ssv"] for k in keys]
+    bil = [res[k]["bilinear"] for k in keys]
+    freq = [res[k]["freq"] for k in keys]
+    lsc = [res[k]["lsc"] for k in keys]
     ckf = [res[k]["ckf"] for k in keys]
-    imp = [(1 - c / s) * 100 for s, c in zip(ssv, ckf)]
+    best = [min(a, b, c) for a, b, c in zip(bil, freq, lsc)]
+    imp = [(1 - c / b) * 100 for b, c in zip(best, ckf)]
 
     fig = plt.figure(figsize=(13.4, 5.6), dpi=220)
     gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 1.15], hspace=0.30, wspace=0.22)
 
     ax = fig.add_subplot(gs[0, :]); ax.axis("off")
     ax.set_xlim(0, 1); ax.set_ylim(0, 1)
-    ax.set_title("(a) 三区 × 两方法 RMSE（mGal）", fontsize=12, pad=2)
-    cols = ["区域", "双线性 15″ 场（SSV）", "相干保持 KF", "改善"]
-    widths = [0.20, 0.30, 0.28, 0.22]
+    ax.set_title("(a) 三区 × 四种 15″ 场 RMSE（mGal）", fontsize=11, pad=2)
+    cols = ["区域", "双线性", "频域融合", "LSC", "相干保持 KF", "改善（相对最优）"]
+    widths = [0.14, 0.17, 0.17, 0.15, 0.18, 0.19]
     y = 1.0; h = 0.22
     x = 0
     for c, w in zip(cols, widths):
         ax.add_patch(Rectangle((x, y-h), w, h, fc=NAVY, ec="white", lw=1))
         ax.text(x+w/2, y-h/2, c, ha="center", va="center", color="white",
-                fontsize=9, fontweight="bold")
+                fontsize=8.3, fontweight="bold")
         x += w
-    for i, (n, s, c, im) in enumerate(zip(names, ssv, ckf, imp)):
+    for i, (n, b1, f1, l1, c1, im) in enumerate(zip(names, bil, freq, lsc, ckf, imp)):
         yy = y - h*(i+2)
-        vals = [n, f"{s:.2f}", f"{c:.2f}", f"{im:.1f}%"]
+        vals = [n, f"{b1:.2f}", f"{f1:.2f}", f"{l1:.2f}", f"{c1:.2f}", f"{im:.1f}%"]
         x = 0
         for val, w in zip(vals, widths):
             ax.add_patch(Rectangle((x, yy), w, h, fc=LIGHT, ec="white", lw=1))
             ax.text(x+w/2, yy+h/2, val, ha="center", va="center",
-                    fontsize=9, color="#1A1A1A")
+                    fontsize=8.6, color="#1A1A1A")
             x += w
-    ax.text(0.0, 0.02, "双线性 15″ 场为 SSV33.1 的 1′ 双线性插值；三区均改善，九州东侧最大",
-            fontsize=8, color=RED)
+    ax.text(0.0, 0.02, "三种常用场均以 SSV33.1 的 1′ 数据为输入；改善相对三者中最低 RMSE",
+            fontsize=7.8, color=RED)
 
     ax = fig.add_subplot(gs[1, 0])
-    x = np.arange(3); w = 0.30
-    ax.bar(x-w/2, ssv, w, color="#D6E2F0", label="双线性 15″ 场")
-    ax.bar(x+w/2, ckf, w, color=NAVY, label="相干保持 KF")
+    x = np.arange(3); w = 0.19
+    ax.bar(x-1.5*w, bil, w, color="#D6E2F0", label="双线性")
+    ax.bar(x-0.5*w, freq, w, color="#7FA8C9", label="频域融合")
+    ax.bar(x+0.5*w, lsc, w, color=GOLD, label="LSC")
+    ax.bar(x+1.5*w, ckf, w, color=NAVY, label="相干保持 KF")
     for i in range(3):
-        ax.text(x[i]-w/2, ssv[i]+0.08, f"{ssv[i]:.2f}", ha="center", fontsize=7.5)
-        ax.text(x[i]+w/2, ckf[i]+0.08, f"{ckf[i]:.2f}", ha="center", fontsize=7.5)
-    ax.set_xticks(x); ax.set_xticklabels(names, fontsize=9)
+        ax.text(x[i]+1.5*w, ckf[i]+0.08, f"{ckf[i]:.2f}", ha="center", fontsize=7)
+    ax.set_xticks(x); ax.set_xticklabels(names, fontsize=8.5)
     ax.set_ylabel("RMSE (mGal)", fontsize=9)
     ax.set_title("(b) 分组对比", fontsize=11)
-    ax.legend(fontsize=8, frameon=False); ax.grid(axis="y", alpha=0.2)
-    ax.tick_params(labelsize=8)
+    ax.set_xlim(-0.65, 2.65)
+    ax.legend(fontsize=6.5, frameon=False, ncol=2); ax.grid(axis="y", alpha=0.2)
+    ax.tick_params(labelsize=7.5)
 
     ax = fig.add_subplot(gs[1, 1])
     d = np.load(OUT / "validation_G_fields.npz")
@@ -135,13 +140,13 @@ def accuracy():
     val = np.asarray(d["val"], float)
     ix = np.clip(np.searchsorted(lon, val[:, 0]), 0, len(lon)-1)
     iy = np.clip(np.searchsorted(lat, val[:, 1]), 0, len(lat)-1)
-    for name, fld, col in (("双线性 15″ 场", d["ssv"], "#D6E2F0"),
+    for name, fld, col in (("双线性", d["ssv"], "#D6E2F0"),
                            ("相干保持 KF", d["ckf"], NAVY)):
         e = np.abs(fld[iy, ix] - val[:, 2])
         ax.plot(np.sort(e), np.linspace(0, 1, len(e)), color=col, lw=1.6, label=name)
     ax.set_xlim(0, 8); ax.set_xlabel("|误差| (mGal)", fontsize=9)
     ax.set_ylabel("累积比例", fontsize=9)
-    ax.set_title("(c) 误差 CDF", fontsize=11)
+    ax.set_title("(c) 误差 CDF（双线性 vs CKF）", fontsize=10)
     ax.legend(fontsize=8, frameon=False); ax.grid(alpha=0.2)
     ax.tick_params(labelsize=8)
     fig.savefig(OUT / "fig_new_accuracy_table.png", bbox_inches="tight")

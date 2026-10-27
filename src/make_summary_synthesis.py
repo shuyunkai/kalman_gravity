@@ -14,7 +14,7 @@ fig = plt.figure(figsize=(13.4, 5.4), dpi=220)
 gs = fig.add_gridspec(2, 3, height_ratios=[1.0, 1.65], hspace=0.42, wspace=0.32)
 
 cards = [("15″", "分辨率", "1.85 km 网格"),
-         ("6.3–14.7%", "精度改善（三区）", "相对双线性 15″ 场"),
+         ("5.0–8.6%", "精度改善（三区）", "相对最优常用 15″ 场"),
          ("81.0%", "5 km 断裂覆盖", "命中 24.0%")]
 for i, (val, name, sub) in enumerate(cards):
     ax = fig.add_subplot(gs[0, i]); ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
@@ -27,12 +27,12 @@ for i, (val, name, sub) in enumerate(cards):
 
 ax = fig.add_subplot(gs[1, 0])
 names = ["南海-琉球", "九州东侧", "日本"]
-vals = [8.7, 14.7, 6.3]
+vals = [8.6, 5.0, 5.2]
 ax.barh(names, vals, color=[NAVY, NAVY, NAVY], height=0.55)
 for i, v in enumerate(vals):
     ax.text(v + 0.15, i, f"{v}%", va="center", fontsize=8)
-ax.set_xlim(0, 17); ax.set_xlabel("相对双线性 15″ 场改善 (%)", fontsize=8)
-ax.set_title("(a) 相对双线性 15″ 场的改善", fontsize=10)
+ax.set_xlim(0, 12); ax.set_xlabel("相对最优常用 15″ 场改善 (%)", fontsize=8)
+ax.set_title("(a) 相对最优常用 15″ 场的改善", fontsize=10)
 ax.tick_params(labelsize=8); ax.grid(axis="x", alpha=0.2)
 
 ax = fig.add_subplot(gs[1, 1])
