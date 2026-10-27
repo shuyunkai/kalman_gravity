@@ -12,7 +12,7 @@ plt.rcParams.update({"font.sans-serif": ["Microsoft YaHei"],
 fig, ax = plt.subplots(figsize=(13.4, 5.2), dpi=220)
 ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
 
-ax.text(0.5, 0.96, "三类问题在标准 KF 中的处理位置", ha="center",
+ax.text(0.5, 0.96, "三类方法限制与共同定权", ha="center",
         fontsize=12, color=NAVY, fontweight="bold")
 ax.text(0.16, 0.87, "三类方法的限制", ha="center", fontsize=10, color=RED)
 ax.text(0.49, 0.87, "KF 中的环节", ha="center", fontsize=10, color=NAVY)
