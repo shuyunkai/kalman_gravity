@@ -37,7 +37,7 @@ def concept():
     ax.set_xscale("log")
     ax.set_xlim(1, 1000); ax.set_ylim(40, -2)
     ax.set_xlabel("波长 (km)", fontsize=9); ax.set_ylabel("等效深度 (km)", fontsize=9)
-    ax.set_title("(b) 波长—深度—构造", fontsize=11)
+    ax.set_title("(b) 空间波长—等效深度—构造", fontsize=10)
     ax.grid(alpha=0.2, which="both")
     ax.tick_params(labelsize=7)
 
