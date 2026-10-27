@@ -42,30 +42,23 @@ ax.text(0.5, -0.22, "$T_i(k)=1-wc_i^2(1-e^{-k^2\\sigma^2/2})$",
         transform=ax.transAxes, ha="center", fontsize=10, color=RED)
 
 ax = axes[2]; ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
-ax.text(0.5, 0.97, "(c) $C$ 的取值流程", ha="center", fontsize=12,
+ax.text(0.5, 0.97, "(c) $C$ 的取值", ha="center", fontsize=12,
         color=NAVY, fontweight="bold")
-steps = [
-    ("GEBCO 地形", ""),
-    ("布格高频 $h_p$", ""),
-    ("梯度 $g_x,\\ g_y$", ""),
-    ("结构张量 $J_{xx},J_{yy},J_{xy}$", "$G_8$ 平滑"),
-    ("相干 $C_i$", "$\\frac{\\sqrt{(J_{xx}-J_{yy})^2+4J_{xy}^2}}{J_{xx}+J_{yy}}$"),
-    ("权重 $wC_i^2$", "$0\\leq C_i\\leq1$"),
-]
-for i, (main, sub) in enumerate(steps):
-    y = 0.81 - i*0.135
-    ax.add_patch(FancyBboxPatch((0.02, y), 0.96, 0.105,
-                                boxstyle="round,pad=0.012,rounding_size=0.02",
-                                fc="#EEF3F9" if i < 5 else "#FFF8E7",
-                                ec=NAVY if i < 5 else GOLD, lw=1))
-    ax.text(0.5, y+0.063, main, ha="center", va="center", fontsize=8.8,
-            color=NAVY, fontweight="bold" if i == 5 else "normal")
-    if sub:
-        ax.text(0.5, y+0.025, sub, ha="center", va="center", fontsize=6.5,
-                color="#44546A")
-    if i < 5:
-        ax.add_patch(FancyArrowPatch((0.5, y-0.002), (0.5, y-0.030),
-                                     arrowstyle="-|>", mutation_scale=10,
-                                     color="#78909C", lw=1))
+ax.text(0.03, 0.88, "1. 由 GEBCO 地形得布格高频 $h_p$", fontsize=8.5, va="center")
+ax.text(0.03, 0.79, "2. 求梯度", fontsize=8.5, va="center")
+ax.text(0.5, 0.70, "$g_x=\\partial h/\\partial x,\\quad g_y=\\partial h/\\partial y$",
+        fontsize=9, ha="center", va="center")
+ax.text(0.03, 0.60, "3. 构造结构张量", fontsize=8.5, va="center")
+ax.text(0.5, 0.52, "$J_{xx}=G_8(g_x^2),\\quad J_{yy}=G_8(g_y^2)$",
+        fontsize=8, ha="center", va="center")
+ax.text(0.5, 0.45, "$J_{xy}=G_8(g_xg_y)$", fontsize=8, ha="center", va="center")
+ax.text(0.03, 0.37, "$G_8$：8 格点高斯平滑，15″ 下约 3.7 km",
+        fontsize=7.5, va="center", color="#44546A")
+ax.text(0.03, 0.30, "4. 相干", fontsize=8.5, va="center")
+ax.text(0.5, 0.19,
+        "$C_i=\\frac{\\sqrt{(J_{xx}-J_{yy})^2+4J_{xy}^2}}{J_{xx}+J_{yy}+\\epsilon}$",
+        fontsize=9.5, ha="center", va="center")
+ax.text(0.03, 0.10, "5. 截断并平方：$0\\leq C_i\\leq1$", fontsize=8.5, va="center")
+ax.text(0.03, 0.04, "权重 $wC_i^2$", fontsize=8.5, va="center")
 fig.savefig(f"{ROOT}/fig_new_contribution_formula.png", bbox_inches="tight")
 print("saved")
