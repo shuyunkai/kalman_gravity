@@ -17,17 +17,18 @@ plt.rcParams.update({"font.sans-serif": ["Microsoft YaHei"],
 
 
 def concept():
-    g = xr.open_dataset(ROOT / "data/icgem/grid/EGM2008_gravity_anomaly.nc")
-    gv = g["gravity_anomaly"].values[::20, ::20]
+    g = xr.open_dataset(ROOT / "data/ssv32/grav_33.1.nc")
+    gv = g["z"].values[::20, ::20]
     glon = g["lon"].values[::20]; glat = g["lat"].values[::20]
 
     fig, axes = plt.subplots(1, 2, figsize=(13.4, 5.0), dpi=220,
                              gridspec_kw={"width_ratios": [1.1, 1.0], "wspace": 0.18})
     ax = axes[0]
-    im = ax.imshow(gv, cmap="RdBu_r", origin="upper",
-                   extent=[glon[0], glon[-1], glat[-1], glat[0]],
+    ax.set_facecolor("#E6E6E6")
+    im = ax.imshow(gv, cmap="RdBu_r", origin="lower",
+                   extent=[glon[0], glon[-1], glat[0], glat[-1]],
                    vmin=-100, vmax=100, aspect="auto")
-    ax.set_title("(a) 全球自由空气重力异常（EGM2008）\n长波背景，不作为 1′ 产品",
+    ax.set_title("(a) 全球海洋重力异常（SSV33.1，1′）\n本文使用的 1′ 产品",
                  fontsize=9.5, pad=4)
     ax.set_xlabel("经度 (°E)", fontsize=8); ax.set_ylabel("纬度 (°N)", fontsize=8)
     ax.tick_params(labelsize=7)
