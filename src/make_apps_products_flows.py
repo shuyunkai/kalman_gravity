@@ -67,11 +67,11 @@ def applications():
           [0.13, 0.31, 0.20, 0.14, 0.22], fs=9)
 
     panels = [
-        ("(a) 导航：短波梯度", grad, "Reds", None),
-        ("(b) 地形/工程：5–20 km", g5, "RdBu_r", "sym"),
-        ("(c) 资源：布格异常", boug, "RdBu_r", "sym"),
+        ("(a) 导航：短波梯度", grad * 1000, "Reds", None, "mGal/km"),
+        ("(b) 地形/工程：5–20 km", g5, "RdBu_r", "sym", "mGal"),
+        ("(c) 资源：布格异常", boug, "RdBu_r", "sym", "mGal"),
     ]
-    for ax, (title, fld, cmap, mode) in zip(
+    for ax, (title, fld, cmap, mode, unit) in zip(
             [fig.add_subplot(gs[1, i]) for i in range(3)], panels):
         z = fld[sub]
         if mode == "sym":
@@ -84,6 +84,9 @@ def applications():
                            extent=ext, aspect="auto")
         ax.set_title(title, fontsize=9)
         ax.set_xticks([]); ax.set_yticks([])
+        cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02)
+        cb.set_label(unit, fontsize=6.5)
+        cb.ax.tick_params(labelsize=6)
     fig.savefig(OUT / "fig_new_why_matrix.png", bbox_inches="tight")
     plt.close(fig)
 
