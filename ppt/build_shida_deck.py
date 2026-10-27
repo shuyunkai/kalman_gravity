@@ -9,8 +9,8 @@ from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.util import Inches, Pt
 
 ROOT = Path(__file__).parent.parent
-PPT_SRC = ROOT / "ppt" / "_石大空白_16页.pptx"
-PPT_OUT = ROOT / "ppt" / "汇报_石大模板_16页.pptx"
+PPT_SRC = ROOT / "ppt" / "_石大空白_17页.pptx"
+PPT_OUT = ROOT / "ppt" / "汇报_石大模板_17页.pptx"
 NEW = ROOT / "output_real" / "three_parts" / "newdeck"
 
 GOLD = RGBColor(0xC9, 0xA2, 0x27)
@@ -67,6 +67,10 @@ PAGES = [
      "先以 SSV 与地形高频构造初始先验，再把 1′ 块观测和船测逐轮加入，6 轮后得到后验；"
      "修正集中在测线与构造带。先验只作初始场，后续由观测更新。",
      NEW / "fig_new_iterations_mixed.png"),
+    ("KF 的中间变量",
+     "相干保持 KF 的过程量：C 控制哪里少平滑，wC² 是权重；预测修正把平滑场拉回结构，"
+     "船测更新在测线邻域扩散。这样能看出方法改的是过程，不只是最终精度。",
+     NEW / "fig_new_intermediates.png"),
     ("精度总结",
      "三个区域都用整条航次留出，分别比较双线性、频域融合、LSC 三种常用 15″ 场与相干保持 KF；"
      "三场都以 SSV33.1 的 1′ 为输入，改善相对其中最优场。",
@@ -101,6 +105,7 @@ HIGHLIGHTS = [
     ["相干保持卡尔曼滤波", "结构张量相干 C", "5–20 km", "不牺牲重力 RMSE"],
     ["1′ 观测", "地形高频", "6 轮", "RTS", "同一递推"],
     ["初始先验", "1′ 块观测", "船测", "6 轮后验"],
+    ["C 场", "wC²", "预测修正", "船测更新"],
     ["整条航次留出", "三种常用场", "相干保持 KF"],
     ["双线性", "频域融合", "LSC", "相干保持 KF−常用场"],
     ["整条航次留出", "连续剖面", "四种常用场", "误差"],
@@ -108,7 +113,7 @@ HIGHLIGHTS = [
     ["15″ 场", "精度", "短波结构"],
 ]
 
-NUMS = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五", "十六"]
+NUMS = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五", "十六", "十七"]
 
 
 def clear(slide):
@@ -184,7 +189,7 @@ for i, (title, body, fig) in enumerate(PAGES):
     y = 2.40 + (max_h - h) / 2
     s.shapes.add_picture(str(fig), Inches(x), Inches(y), width=Inches(w))
 
-    add_text(s, 12.05, 7.10, 1.0, 0.28, f"{i+1} / 16", 9,
+    add_text(s, 12.05, 7.10, 1.0, 0.28, f"{i+1} / 17", 9,
              RGBColor(0xD9, 0xC8, 0x9A), bold=False, align=PP_ALIGN.RIGHT)
 
 prs.save(PPT_OUT)

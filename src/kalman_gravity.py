@@ -84,6 +84,7 @@ class KalmanGravityReconstructor:
         self.gravity_lr = gravity_lr
         self.gravity_ship = gravity_ship
         self.ship_train_mask = ship_train_mask
+        self.ship_inc_history = []
         self._initialized = True
         self._iter_count = 0
 
@@ -220,6 +221,7 @@ class KalmanGravityReconstructor:
         x_2d = self.x.reshape(self.ny, self.nx)
         P_2d = self.P_diag.reshape(self.ny, self.nx)
         ship_flat = self.gravity_ship.ravel()
+        x_before = self.x.copy()
 
         # ---- 1. 逐点标量卡尔曼更新（矢量化；观测像素互不重复，顺序无关）----
         ii, jj = np.divmod(obs_indices, self.nx)
@@ -229,6 +231,7 @@ class KalmanGravityReconstructor:
                                     ship_flat, valid_mask)
             self.x = x_2d.ravel()
             self.P_diag = P_2d.ravel()
+            self.ship_inc_history.append((self.x - x_before).reshape(self.ny, self.nx))
             return
 
         P_ii = P_2d[ii, jj]
@@ -283,6 +286,7 @@ class KalmanGravityReconstructor:
 
         self.x = x_2d.ravel()
         self.P_diag = P_2d.ravel()
+        self.ship_inc_history.append((self.x - x_before).reshape(self.ny, self.nx))
 
     def _update_ship_local(self, obs_indices, ii, jj, x_2d, P_2d,
                            ship_flat, valid_mask):

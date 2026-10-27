@@ -53,7 +53,9 @@ def build(g_lr, bathy, lon, lat, w_keep=0.7, p0=2.0, n_iter=6,
     def predict(self, smooth_sigma=4.0):
         x2 = self.x.reshape(self.ny, self.nx)
         xs = gaussian_filter(x2, sigma=smooth_sigma)
-        x2 = xs + w_keep * w * (x2 - xs)
+        corr = w_keep * w * (x2 - xs)
+        self.pred_corr_history.append(corr.copy())
+        x2 = xs + corr
         self.x = x2.ravel()
         factor = 1.0 + smooth_sigma * 0.1
         self.P_diag = self.P_diag * factor + self.Q_diag
@@ -63,6 +65,10 @@ def build(g_lr, bathy, lon, lat, w_keep=0.7, p0=2.0, n_iter=6,
     import types
     r.predict = types.MethodType(predict, r)
     r.prior_2d = prior.copy()
+    r.coh_2d = coh.copy()
+    r.weight_2d = (w_keep * w).copy()
+    r.pred_corr_history = []
+    r.ship_inc_history = []
     g = r.run(n_iterations=n_iter, smooth_sigma=4.0, verbose=False)
     return r if return_reconstructor else g
 
