@@ -1,4 +1,4 @@
-"""缺点页 2×2：1′ 场、CKF 场、差值、分频幅值。"""
+"""缺点页 2×2：1′ 场、相干保持 KF 场、差值、分频幅值。"""
 import sys
 from pathlib import Path
 
@@ -43,7 +43,7 @@ def main():
     vd = np.nanpercentile(np.abs(diff[sub]), 98)
     im = ax.imshow(diff[sub], cmap="PuOr_r", origin="lower", vmin=-vd, vmax=vd,
                    extent=ext, aspect="auto")
-    ax.set_title("(c) CKF − 1′ 差值", fontsize=12)
+    ax.set_title("(c) 相干保持 KF − 1′ 差值", fontsize=12)
     ax.set_xlabel("经度 (°E)", fontsize=10)
     ax.set_ylabel("纬度 (°N)", fontsize=10)
     ax.tick_params(labelsize=9)
@@ -57,7 +57,7 @@ def main():
     r2 = [float(np.std(bandpass(ckf, dx, dy, a, b))) for a, b, _ in bands]
     x = np.arange(3); w = 0.34
     ax.bar(x - w/2, r1, w, color="#D6E2F0", label="1′")
-    ax.bar(x + w/2, r2, w, color="#0B2545", label="CKF")
+    ax.bar(x + w/2, r2, w, color="#0B2545", label="相干保持 KF")
     for i in range(3):
         ax.text(x[i]-w/2, r1[i]+0.1, f"{r1[i]:.1f}", ha="center", fontsize=8)
         ax.text(x[i]+w/2, r2[i]+0.1, f"{r2[i]:.1f}", ha="center", fontsize=8)

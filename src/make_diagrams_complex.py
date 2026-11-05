@@ -60,7 +60,7 @@ def concept():
 
 
 def kf_cycle():
-    fig, ax = plt.subplots(figsize=(13.4, 5.2), dpi=220)
+    fig, ax = plt.subplots(figsize=(13.0, 5.28), dpi=220)
     ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
 
     def node(x, y, w, h, title, lines, color=LIGHT):
@@ -95,15 +95,15 @@ def kf_cycle():
                                      connectionstyle=f"arc3,rad={rad}"))
     ax.text(0.73, 0.63, "下一轮", fontsize=8, color=RED)
 
-    ax.add_patch(FancyBboxPatch((0.04, 0.80), 0.20, 0.12,
+    ax.add_patch(FancyBboxPatch((0.72, 0.84), 0.20, 0.10,
                                 boxstyle="round,pad=0.01,rounding_size=0.02",
                                 fc="#FFF8E7", ec=GOLD, lw=1))
-    ax.text(0.14, 0.86, "输入\n卫星 / 船测", ha="center", va="center", fontsize=8)
+    ax.text(0.82, 0.89, "输入\n卫星 / 船测", ha="center", va="center", fontsize=8)
     ax.add_patch(FancyBboxPatch((0.78, 0.08), 0.18, 0.12,
                                 boxstyle="round,pad=0.01,rounding_size=0.02",
                                 fc="#FCEDEA", ec=RED, lw=1))
     ax.text(0.87, 0.14, "输出\n15″ 场 + P", ha="center", va="center", fontsize=8)
-    ax.annotate("", xy=(0.32, 0.82), xytext=(0.24, 0.86),
+    ax.annotate("", xy=(0.82, 0.58), xytext=(0.82, 0.84),
                 arrowprops=dict(arrowstyle="-|>", color=GOLD, lw=1.2))
     ax.annotate("", xy=(0.78, 0.14), xytext=(0.68, 0.16),
                 arrowprops=dict(arrowstyle="-|>", color=RED, lw=1.2))

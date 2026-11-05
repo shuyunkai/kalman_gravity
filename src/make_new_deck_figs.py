@@ -132,7 +132,7 @@ def fig_products():
 
     ax = axes[1]
     regions = ["南海-琉球", "菲律宾海", "日本综合区"]
-    ssv = [5.344, 1.485, 3.960]; kf = [4.881, 1.483, 3.710]
+    ssv = [5.344, 1.485, 3.960]; kf = [4.7205, 1.4448, 3.4157]
     x = np.arange(3); w = 0.35
     ax.bar(x - w/2, ssv, w, color=PALE, label="1′ 产品")
     ax.bar(x + w/2, kf, w, color=NAVY, label="15″ 重建")
@@ -299,13 +299,13 @@ def fig_validation():
     regions = ["南海-琉球", "菲律宾海", "日本综合区"]
     ssv = [5.344, 1.485, 3.960]
     kf = [4.951, 1.480, 3.883]
-    ckf = [4.881, 1.483, 3.710]
+    ckf = [4.7205, 1.4448, 3.4157]
     x = np.arange(3); w = 0.26
     fig, ax = plt.subplots(figsize=(12.8, 4.0), dpi=220)
     ax.bar(x - w, ssv, w, color=PALE, label="1′ 产品")
     ax.bar(x, kf, w, color=MID, label="标准 KF")
     ax.bar(x + w, ckf, w, color=NAVY, label="相干保持 KF")
-    ann = ["CKF ↓8.7%", "KF ↓0.3%", "CKF ↓6.3%"]
+    ann = ["相干保持 KF ↓8.7%", "KF ↓0.3%", "相干保持 KF ↓6.3%"]
     for i in range(3):
         for j, val in enumerate((ssv[i], kf[i], ckf[i])):
             ax.text(x[i] + (j-1)*w, val + 0.05, f"{val:.2f}", ha="center", fontsize=7)

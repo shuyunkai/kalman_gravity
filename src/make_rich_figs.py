@@ -58,7 +58,7 @@ def main():
     vd = np.nanpercentile(np.abs(diff[sub]), 98)
     im2 = ax.imshow(diff[sub], cmap="PuOr_r", origin="lower", vmin=-vd, vmax=vd,
                     extent=ext, aspect="auto")
-    ax.set_title("(d) CKF − 1′ 差值", fontsize=9)
+    ax.set_title("(d) 相干保持 KF − 1′ 差值", fontsize=9)
     ax.set_xlabel("经度 (°E)", fontsize=7); ax.set_ylabel("纬度 (°N)", fontsize=7)
     ax.tick_params(labelsize=6)
     fig.colorbar(im2, ax=ax, fraction=0.03, pad=0.01)
@@ -81,7 +81,7 @@ def main():
     x = np.arange(3); w = 0.26
     ax.bar(x - w, [res[k]["ssv"] for k in keys], w, color=PALE, label="1′")
     ax.bar(x, [res[k]["kf"] for k in keys], w, color=MID, label="标准 KF")
-    ax.bar(x + w, [res[k]["ckf"] for k in keys], w, color=NAVY, label="CKF")
+    ax.bar(x + w, [res[k]["ckf"] for k in keys], w, color=NAVY, label="相干保持 KF")
     for i, k in enumerate(keys):
         ax.text(x[i] + w, res[k]["ckf"] + 0.08, f"{res[k]['ckf']:.2f}",
                 ha="center", fontsize=6)
@@ -111,7 +111,7 @@ def main():
     ax = axes[1]
     bins = np.linspace(-8, 8, 60)
     for e, lab, col in ((err_s, "1′", PALE), (err_k, "标准 KF", MID),
-                        (err_c, "CKF", NAVY)):
+                        (err_c, "相干保持 KF", NAVY)):
         ax.hist(e, bins=bins, density=True, histtype="step", lw=1.3,
                 color=col, label=lab)
     ax.set_xlabel("误差 (mGal)", fontsize=7); ax.set_ylabel("密度", fontsize=7)
@@ -120,7 +120,7 @@ def main():
 
     ax = axes[2]
     for e, lab, col in ((err_s, "1′", PALE), (err_k, "标准 KF", MID),
-                        (err_c, "CKF", NAVY)):
+                        (err_c, "相干保持 KF", NAVY)):
         ax.plot(np.sort(np.abs(e)), np.linspace(0, 1, len(e)), color=col,
                 lw=1.4, label=lab)
     ax.set_xlim(0, 8); ax.set_xlabel("|误差| (mGal)", fontsize=7)

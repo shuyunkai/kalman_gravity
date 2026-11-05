@@ -14,7 +14,7 @@ from bathymetry_inversion import bandpass, parker_forward, parker_inversion
 ROOT = Path(__file__).parent.parent
 SRC = ROOT / "output_real" / "three_parts" / "ship_regions"
 GLOB = ROOT / "data" / "GlobSed" / "GlobSed_package3" / "GlobSed-v3.nc"
-BAND = (20e3, 200e3)
+BAND = (10e3, 50e3)
 RHO_W, RHO_S, RHO_B = 1030.0, 2200.0, 2700.0
 G = 6.6743e-11
 K_W = 2 * np.pi * G * (RHO_S - RHO_W) * 1e5   # mGal/m
@@ -70,7 +70,7 @@ def main():
             gb = g + K_W * dw + K_S * t0_hr
             gb = bandpass(gb, dx, dy, *BAND)
             out = parker_inversion(gb - g0, dx, dy, RHO_B - RHO_S, z0,
-                                   n_iter=4, lam_min=150e3, relax=0.05,
+                                   n_iter=4, lam_min=30e3, relax=0.05,
                                    verbose=False)
             dh = out[0] if isinstance(out, tuple) else out
             dd = z0 - (h0 + dh)

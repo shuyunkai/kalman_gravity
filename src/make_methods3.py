@@ -13,7 +13,7 @@ fig, ax = plt.subplots(figsize=(13.6, 4.7), dpi=220)
 ax.axis("off"); ax.set_xlim(0, 1); ax.set_ylim(0, 1)
 
 lanes = [
-    ("插值", ["1′ 格网 + 船测", "核函数\n双线性 / 克里金", "逐点解算\n15″ 格点", "15″ 场\n短波未增加"],
+    ("插值", ["1′ 格网 + 船测", "核函数\n双线性 / 克里金", "逐点解算\n15″ 格点", "15″ 场\n格网映射"],
      "$\\hat z(x_0)=\\sum w_i z_i$", "无新增短波"),
     ("频域融合", ["测高重力 + 船测", "谱权 $W(k)$\n长波 / 短波", "逆变换到\n15″ 格点", "15″ 场\n短波来自船测/先验"],
      "$Z=WZ_{alt}+(1-W)Z_{ship}$", "短波来自船测"),
@@ -47,7 +47,7 @@ for k, (name, steps, eq, note) in enumerate(lanes):
                                          color="#78909C", lw=1.1))
     ax.text(x+w/2, 0.075, eq, ha="center", fontsize=8.5, color=RED)
 
-ax.text(0.5, 0.985, "三种方法都把 1′ 与船测解算到 15″ 格点，插值不新增短波",
+ax.text(0.5, 0.985, "三种方法把 1′ 与船测解算到 15″ 格点",
         ha="center", fontsize=11, color=NAVY, fontweight="bold")
 fig.savefig(f"{ROOT}/fig_new_methods_3lanes.png", bbox_inches="tight")
 print("saved")

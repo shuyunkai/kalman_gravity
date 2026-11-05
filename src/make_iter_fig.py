@@ -52,11 +52,11 @@ def main():
     axes[0, 0].scatter(val[::6, 0], val[::6, 1], s=0.6, c="k", alpha=0.5)
 
     ax = axes[1, 2]
-    inc = r.x_history[5] - r.prior_2d
+    inc = r.x_history[5] - r.x_history[0]
     vi = np.nanpercentile(np.abs(inc[sub]), 98)
     im = ax.imshow(inc[sub], cmap="PuOr_r", origin="lower",
                    vmin=-vi, vmax=vi, extent=ext, aspect="auto")
-    ax.set_title("(f) 第 6 轮 − 先验", fontsize=11)
+    ax.set_title("(f) 第 6 轮 − 第 1 轮", fontsize=11)
     ax.set_xlabel("经度 (°E)", fontsize=9)
     ax.set_ylabel("纬度 (°N)", fontsize=9)
     ax.tick_params(labelsize=8)

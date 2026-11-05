@@ -7,7 +7,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import xarray as xr
 from scipy.ndimage import zoom as sp_zoom
+from scipy.interpolate import RegularGridInterpolator
 from scipy.spatial import cKDTree
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -26,13 +28,27 @@ plt.rcParams.update({"font.sans-serif": ["Microsoft YaHei"],
                      "axes.unicode_minus": False, "font.size": 8})
 
 
+def sdust_prior(lon, lat):
+    ds = xr.open_dataset(ROOT / "data/SDUST2022/SDUST2022GRA.nc")
+    sub = ds["ga"].sel(lon=slice(LON[0], LON[1]), lat=slice(LAT[0], LAT[1])).values
+    glon = np.asarray(ds.lon.sel(lon=slice(LON[0], LON[1])))
+    glat = np.asarray(ds.lat.sel(lat=slice(LAT[0], LAT[1])))
+    ds.close()
+    if glat[0] > glat[-1]:
+        sub = sub[::-1]; glat = glat[::-1]
+    f = RegularGridInterpolator((glat, glon), sub, bounds_error=False, fill_value=np.nan)
+    LLON, LLAT = np.meshgrid(lon, lat)
+    z = f(np.column_stack([LLAT.ravel(), LLON.ravel()])).reshape(LLAT.shape)
+    return np.where(np.isfinite(z), z, np.nanmedian(z))
+
+
 def main():
     g_lr, _, _, _ = load_ssv_region(LON, LAT)
     ny, nx = g_lr.shape; up = 4
     lon = cell_centers(LON[0], LON[1], nx * up)
     lat = cell_centers(LAT[0], LAT[1], ny * up)
     bathy = load_bathy_15s(LON, LAT, lon, lat)
-    g = build(g_lr, bathy, lon, lat, w_keep=1.0)
+    g = build(g_lr, bathy, lon, lat, w_keep=1.0, ssv_mode="obs_only", p0_obs=3.0, prior_long=sdust_prior(lon, lat))
     g1 = sp_zoom(g_lr, (up, up), order=1)
     dx = float(lon[1] - lon[0]) * 111320 * np.cos(np.radians(lat.mean()))
     dy = float(lat[1] - lat[0]) * 111320
@@ -62,7 +78,7 @@ def main():
     fig, axes = plt.subplots(2, 3, figsize=(13.4, 5.4), dpi=220)
 
     ax = axes[0, 0]
-    labels = ["5 km 覆盖", "5 km 命中"]
+    labels = ["5 km 缓冲覆盖率", "5 km 缓冲命中率"]
     std = [cov1, prec1]
     ckf = [cov, prec]
     y = np.arange(2); h = 0.30
@@ -128,7 +144,7 @@ def main():
     im = ax.imshow(g[k:-k, k:-k], cmap="RdBu_r", origin="lower", vmin=-v, vmax=v,
                    extent=ext, aspect="auto")
     ax.set_title("(e) 相干保持 KF 场", fontsize=10)
-    ax.set_xlabel("经度 (°E)", fontsize=7); ax.tick_params(labelsize=6)
+    ax.set_xlabel("经度 (°E)", fontsize=7); ax.set_ylabel("纬度 (°N)", fontsize=7); ax.tick_params(labelsize=6)
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02).set_label("mGal", fontsize=6)
 
     ax = axes[1, 2]
@@ -137,8 +153,15 @@ def main():
                    extent=ext, aspect="auto")
     ax.contour(lon[k:-k], lat[k:-k], mask[k:-k, k:-k], levels=[0.5],
                colors="cyan", linewidths=0.4)
-    ax.set_title("(f) THG + 脊线（青）", fontsize=10)
-    ax.set_xlabel("经度 (°E)", fontsize=7); ax.tick_params(labelsize=6)
+    fault = np.array([[170.70, -46.20], [170.72, -45.95], [170.78, -45.75],
+                      [170.90, -45.60], [171.05, -45.50], [171.25, -45.40],
+                      [171.45, -45.32], [171.60, -45.25]])
+    ax.plot(fault[:, 0], fault[:, 1], color="red", lw=1.4, ls="--")
+    ax.annotate("大断裂：宽缓边界\nTHG 未达阈值", xy=(171.00, -45.55),
+                xytext=(170.48, -45.38), fontsize=7.5, color="red",
+                arrowprops=dict(arrowstyle="->", color="red", lw=0.8))
+    ax.set_title("(f) THG、脊线（青）与大断裂（红）", fontsize=10)
+    ax.set_xlabel("经度 (°E)", fontsize=7); ax.set_ylabel("纬度 (°N)", fontsize=7); ax.tick_params(labelsize=6)
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02).set_label("THG (Eötvös)", fontsize=6)
 
     fig.tight_layout()

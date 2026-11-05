@@ -20,7 +20,9 @@ LON, LAT = (170.3, 172.1), (-46.4, -45.0)
 
 
 def build(g_lr, bathy, lon, lat, w_keep=0.7, p0=2.0, n_iter=6,
-          ship=None, train=None, return_reconstructor=False):
+          ship=None, train=None, return_reconstructor=False,
+          ssv_mode='both', p0_obs=50.0, region_size_deg=None,
+          prior_long=None):
     ny, nx = bathy.shape
     up = 4
     kf = BathyPriorKF((ny, nx), g_lr.shape, (1.4, 1.8), process_noise_std=p0,
@@ -28,7 +30,15 @@ def build(g_lr, bathy, lon, lat, w_keep=0.7, p0=2.0, n_iter=6,
     ssv_block = block_fill(g_lr, up)
     boug = kf._bathy_to_bouguer(bathy, lon, lat)
     hp = kf._high_pass(boug, lon, lat)
-    prior = ssv_block + 0.5 * hp
+    if ssv_mode == 'obs_only':
+        prior = 0.5 * hp if prior_long is None else prior_long + 0.5 * hp
+        p0_eff = p0_obs
+    elif ssv_mode == 'prior_only':
+        prior = ssv_block + 0.5 * hp
+        p0_eff = p0
+    else:
+        prior = ssv_block + 0.5 * hp
+        p0_eff = p0
 
     gy, gx = np.gradient(hp)
     Jxx = gaussian_filter(gx * gx, 8)
@@ -38,11 +48,11 @@ def build(g_lr, bathy, lon, lat, w_keep=0.7, p0=2.0, n_iter=6,
     w = np.clip(coh, 0, 1) ** 2
 
     r = KalmanGravityReconstructor(grid_shape=(ny, nx),
-                                   region_size_deg=(LAT[1] - LAT[0]),
+                                   region_size_deg=(region_size_deg if region_size_deg is not None else (LAT[1] - LAT[0])),
                                    lr_grid_shape=g_lr.shape)
     r._initialized = True
     r.x = prior.ravel().copy()
-    r.P_diag = p0 ** 2 * np.ones(r.x.size)
+    r.P_diag = p0_eff ** 2 * np.ones(r.x.size)
     r.Q_diag = p0 ** 2 * np.ones(r.x.size)
     r.R_sat_val = 9.0
     r.R_ship_val = 1.0

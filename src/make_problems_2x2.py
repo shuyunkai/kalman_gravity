@@ -7,6 +7,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import LightSource
 
 ROOT = Path(__file__).parent.parent
 OUT = ROOT / "output_real/three_parts/newdeck"
@@ -17,6 +18,7 @@ plt.rcParams.update({"font.sans-serif": ["Microsoft YaHei"],
 def main():
     d = np.load(OUT / "validation_G_fields.npz")
     lon, lat, ssv, ckf = d["lon"], d["lat"], d["ssv"], d["ckf"]
+    bathy = np.load(ROOT / "output_real/three_parts/ship_regions/G_Japan.npz")["bathy"]
     ext = [lon[0], lon[-1], lat[0], lat[-1]]
     k = 4; sub = (slice(k, -k), slice(k, -k))
 
@@ -42,18 +44,27 @@ def main():
     ax.set_title("(b) 1′ 块平均 ≠ 点观测", fontsize=11)
 
     ax = axes[1, 0]
-    ny, nx = ssv.shape
-    blk = ssv.reshape(ny//4, 4, nx//4, 4).mean(axis=(1, 3))
+    ex = [139.25, 139.95, 34.55, 35.15]
+    bx = (lon >= ex[0]) & (lon <= ex[1]); by = (lat >= ex[2]) & (lat <= ex[3])
+    z = bathy[np.ix_(by, bx)]
+    z = z[:z.shape[0]//4*4, :z.shape[1]//4*4]
+    blk = z.reshape(z.shape[0]//4, 4, z.shape[1]//4, 4).mean(axis=(1, 3))
     up = np.repeat(np.repeat(blk, 4, axis=0), 4, axis=1)
-    res = ssv - up
-    vd = np.nanpercentile(np.abs(res[sub]), 98)
-    im = ax.imshow(res[sub], cmap="PuOr_r", origin="lower", vmin=-vd, vmax=vd,
-                   extent=ext, aspect="auto")
-    ax.set_title("(c) 块平均：块边界台阶", fontsize=11)
+    ls = LightSource(azdeg=315, altdeg=45)
+    extc = [lon[bx][0], lon[bx][z.shape[1]-1], lat[by][0], lat[by][z.shape[0]-1]]
+    ax.imshow(ls.shade(up, cmap=plt.cm.Greys, vert_exag=0.6, blend_mode="overlay"),
+              extent=extc, origin="lower", aspect="auto")
+    dxs = lon[bx][1]-lon[bx][0]; dys = lat[by][1]-lat[by][0]
+    for xx in lon[bx][:z.shape[1]:4]:
+        ax.axvline(xx, color="#FFFFFF", lw=0.35, alpha=0.55)
+    for yy in lat[by][:z.shape[0]:4]:
+        ax.axhline(yy, color="#FFFFFF", lw=0.35, alpha=0.55)
+    i0 = (z.shape[1]//8)//4*4; j0 = (z.shape[0]//2)//4*4
+    ax.add_patch(plt.Rectangle((lon[bx][i0], lat[by][j0]), 4*dxs, 4*dys,
+                               fill=False, ec="#C0392B", lw=1.6))
+    ax.set_title("(c) 块平均地形：块边界台阶", fontsize=11)
     ax.set_xlabel("经度 (°E)", fontsize=9); ax.set_ylabel("纬度 (°N)", fontsize=9)
-    ax.tick_params(labelsize=8)
-    cb = fig.colorbar(im, ax=ax, fraction=0.04, pad=0.02)
-    cb.set_label("mGal", fontsize=8); cb.ax.tick_params(labelsize=7)
+    ax.tick_params(labelsize=7)
 
     ax = axes[1, 1]
     x = np.linspace(-10, 10, 400)
@@ -63,7 +74,7 @@ def main():
     ax.plot(x, smooth, color="#0B2545", lw=1.8, ls="--", label="邻域修正")
     ax.axvline(0, color="#9E9E9E", lw=0.8)
     ax.set_xlabel("离船测点距离（像元）", fontsize=9)
-    ax.set_ylabel("修正量（归一）", fontsize=9)
+    ax.set_ylabel("归一化修正量", fontsize=9, labelpad=8)
     ax.set_title("(d) 单点更新 vs 邻域修正", fontsize=11)
     ax.legend(fontsize=8, frameon=False); ax.tick_params(labelsize=8)
     ax.grid(alpha=0.2)

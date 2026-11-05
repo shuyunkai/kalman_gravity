@@ -65,7 +65,7 @@ def main():
     keys = ["D_Nankai", "F_PhilSea", "G_Japan"]
     x = np.arange(3); w = 0.34
     ax.bar(x - w/2, [res[k]["ssv"] for k in keys], w, color="#D6E2F0", label="1′")
-    ax.bar(x + w/2, [res[k]["ckf"] for k in keys], w, color="#0B2545", label="CKF")
+    ax.bar(x + w/2, [res[k]["ckf"] for k in keys], w, color="#0B2545", label="相干保持 KF")
     for i, k in enumerate(keys):
         ax.text(x[i] - w/2, res[k]["ssv"] + 0.1, f"{res[k]['ssv']:.2f}", ha="center", fontsize=8)
     ax.set_xticks(x); ax.set_xticklabels(names, fontsize=10)
